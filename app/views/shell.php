@@ -55,6 +55,14 @@ $bootstrap = json_encode([
         window.__APP__ = <?= $bootstrap ?: '{}' ?>;
     </script>
     <script src="/assets/js/api.js"></script>
+    <script src="/assets/js/store.js"></script>
+    <!-- Feature views (register routes/components before app.js mounts) -->
+    <script src="/assets/js/views/estimation.js"></script>
+    <script src="/assets/js/views/kanban.js"></script>
+    <script src="/assets/js/views/compliance.js"></script>
+    <script src="/assets/js/views/billing.js"></script>
+    <script src="/assets/js/views/documents.js"></script>
+    <script src="/assets/js/views/reports.js"></script>
     <script src="/assets/js/app.js"></script>
 </body>
 </html>
