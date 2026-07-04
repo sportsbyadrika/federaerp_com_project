@@ -102,6 +102,9 @@ return function (Router $router, array $auth, array $write): void {
         $r->get('/incidents', 'QhseController@incidents', $auth);
         $r->post('/incidents', 'QhseController@reportIncident', $write);
 
+        // ---- Reports (JSON definition, or ?format=csv) --------------------
+        $r->get('/reports/{report}', 'ReportController@show', $auth);
+
         // ---- Master data (generic tenant-scoped CRUD) ---------------------
         $resources = ['clients','suppliers','construction-models','base-rates','materials','subcontractors','vehicles','employees'];
         foreach ($resources as $res) {
