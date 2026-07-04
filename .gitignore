@@ -1,0 +1,21 @@
+# Secrets & environment
+config/.env
+*.env
+!.env.example
+
+# Storage runtime content
+storage/uploads/*
+!storage/uploads/.gitignore
+!storage/uploads/.htaccess
+storage/logs/*
+!storage/logs/.gitignore
+
+# OS / editor cruft
+.DS_Store
+Thumbs.db
+*.swp
+.idea/
+.vscode/
+
+# Dependencies (if Composer is ever used for PSR-4/PDF only)
+/vendor/

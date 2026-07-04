@@ -1,0 +1,47 @@
+/* App base styles + shared print stylesheet (reused by every report). */
+
+:root {
+    --bg-base: #F7F7F5;
+    --panel: #ffffff;
+}
+
+html, body { background: var(--bg-base); }
+
+/* Tables that collapse to horizontal scroll on small screens. */
+.table-scroll { width: 100%; overflow-x: auto; -webkit-overflow-scrolling: touch; }
+
+/* Kanban column scroll behaviour (used in Batch 5). */
+.kanban-col { min-height: 4rem; }
+.kanban-card.dragging { opacity: .5; }
+.kanban-ghost { background: #eef2ff; border: 1px dashed #a5b4fc; }
+
+/* ------------------------------------------------------------------ */
+/* Shared print stylesheet: clean white background, hide app chrome.   */
+/* Every report reuses this by rendering inside .report-print.         */
+/* ------------------------------------------------------------------ */
+@media print {
+    @page { margin: 14mm; }
+
+    body { background: #ffffff !important; }
+
+    /* Hide navigation, profile menu, buttons, and anything marked no-print. */
+    header, nav, .print\:hidden,
+    .no-print, button:not(.print-keep) {
+        display: none !important;
+    }
+
+    /* Reset layout padding introduced by the fixed navbar. */
+    main { padding-top: 0 !important; }
+
+    /* Reports render pure white, full width, no shadows/borders. */
+    .report-print, .report-print * { box-shadow: none !important; }
+    .report-print { background: #fff !important; color: #000 !important; }
+
+    .report-header { display: block !important; margin-bottom: 12px; }
+
+    table { width: 100%; border-collapse: collapse; }
+    th, td { border: 1px solid #ccc; padding: 6px 8px; font-size: 12px; }
+}
+
+/* The report header block is only shown when printing. */
+.report-header { display: none; }
