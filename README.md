@@ -77,11 +77,17 @@ The full step-by-step deployment guide + cloud roadmap ships in **Batch 9**.
 |------:|-------|--------|
 | 0 | Global context (`CLAUDE.md`) | done |
 | 1 | Scaffold & foundation | done |
-| 2 | MySQL schema + seed | pending |
-| 3 | Backend engine & REST APIs | pending |
-| 4 | Frontend: shell, dashboards, estimation | pending |
-| 5 | Frontend: Kanban + compliance tracker | pending |
-| 6 | Frontend: billing hub + documents/QHSE | pending |
-| 7 | Reports: print / PDF / CSV | pending |
-| 8 | Security hardening & tests | pending |
-| 9 | Deployment + cloud roadmap | pending |
+| 2 | MySQL schema + seed | done |
+| 3 | Backend engine & REST APIs | done |
+| 4 | Frontend: shell, dashboards, estimation | done |
+| 5 | Frontend: Kanban + compliance tracker | done |
+| 6 | Frontend: billing hub + documents/QHSE | done |
+| 7 | Reports: print / PDF / CSV | done |
+| 8 | Security hardening & tests (`docs/SECURITY.md`) | done |
+| 9 | Deployment + cloud roadmap (`docs/DEPLOYMENT.md`) | done |
+
+## Tests
+
+```bash
+php tests/run_tests.php   # 18 integration assertions (re-seeds first)
+```
