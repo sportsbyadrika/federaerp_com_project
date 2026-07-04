@@ -1,0 +1,10 @@
+# Storage lives outside public_html; even if it becomes web-reachable by
+# misconfiguration, deny ALL direct access. Files are served only through the
+# authenticated PHP streaming proxy.
+Require all denied
+
+<IfModule mod_php.c>
+    php_flag engine off
+</IfModule>
+RemoveHandler .php .phtml .php3 .php4 .php5 .php7
+AddType text/plain .php .phtml .php3 .php4 .php5 .php7
