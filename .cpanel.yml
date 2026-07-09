@@ -1,0 +1,30 @@
+---
+# cPanel Git Version Control deploy tasks.
+# Runs from the repo checkout at /home/olympicd/repositories/federaerp_com_project
+# when you click "Deploy HEAD Commit" (or via the deploy API/webhook).
+#
+# Layout after deploy (security-critical: only public_html is web-served):
+#   /home/olympicd/federaerp.com/
+#   ├── app/ core/ config/ database/ storage/   <- ABOVE the web root, private
+#   └── public_html/                            <- set the domain Document Root HERE
+#
+# ONE-TIME MANUAL SETUP (not done by this file):
+#   1. In cPanel → Domains, set federaerp.com Document Root to
+#         /home/olympicd/federaerp.com/public_html
+#   2. Create /home/olympicd/federaerp.com/config/.env with real DB credentials
+#      (copy from config/.env.example; it is git-ignored and never overwritten).
+#   3. Import database/schema.sql via phpMyAdmin, then optionally run the seed.
+#
+# Notes:
+#   - /bin/cp -R merges and overwrites tracked files but never deletes, so an
+#     existing config/.env and uploaded files under storage/uploads survive.
+deployment:
+  tasks:
+    - export DEPLOYPATH=/home/olympicd/federaerp.com
+    - /bin/mkdir -p $DEPLOYPATH
+    - /bin/mkdir -p $DEPLOYPATH/storage/uploads $DEPLOYPATH/storage/logs
+    - /bin/cp -R app core config database public_html storage $DEPLOYPATH/
+    - /bin/test -f $DEPLOYPATH/config/.env || /bin/cp .env.example $DEPLOYPATH/config/.env
+    - /bin/find $DEPLOYPATH -type d -exec chmod 755 {} +
+    - /bin/find $DEPLOYPATH -type f -exec chmod 644 {} +
+    - /bin/chmod -R 755 $DEPLOYPATH/storage
