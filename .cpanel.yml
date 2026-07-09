@@ -9,22 +9,53 @@
 #   └── public_html/                            <- set the domain Document Root HERE
 #
 # ONE-TIME MANUAL SETUP (not done by this file):
-#   1. In cPanel → Domains, set federaerp.com Document Root to
+#   1. In cPanel -> Domains, set federaerp.com Document Root to
 #         /home/olympicd/federaerp.com/public_html
-#   2. Create /home/olympicd/federaerp.com/config/.env with real DB credentials
-#      (copy from config/.env.example; it is git-ignored and never overwritten).
-#   3. Import database/schema.sql via phpMyAdmin, then optionally run the seed.
+#   2. Create config/.env with real DB credentials by copying the template the
+#      deploy leaves at /home/olympicd/federaerp.com/config/.env.example :
+#         cp config/.env.example config/.env   (then edit DB_* etc.)
+#      The deploy NEVER creates or edits config/.env for you.
+#   3. If PHP is not at /usr/local/bin/php, change PHP_BIN below to your path
+#      (e.g. /opt/cpanel/ea-php82/root/usr/bin/php).
 #
-# Notes:
-#   - /bin/cp -R merges and overwrites tracked files but never deletes, so an
-#     existing config/.env and uploaded files under storage/uploads survive.
+# RUNTIME-FILE PROTECTION (what is NEVER created, edited, or overwritten):
+#   - config/.env            -> secrets. Backed up before the code copy and
+#                               restored after, so a deploy can never change it.
+#                               Only a template (config/.env.example) is shipped.
+#   - storage/uploads/**     -> user-uploaded files. Never copied over/deleted.
+#   - storage/logs/**        -> logs. Never copied over/deleted.
+#   Application CODE (app/, core/, config/*.php, database/, public_html/) is
+#   refreshed every deploy; runtime DATA above is preserved. Pending DB
+#   migrations auto-apply (and skip safely until real DB creds are set).
 deployment:
   tasks:
     - export DEPLOYPATH=/home/olympicd/federaerp.com
-    - /bin/mkdir -p $DEPLOYPATH
-    - /bin/mkdir -p $DEPLOYPATH/storage/uploads $DEPLOYPATH/storage/logs
-    - /bin/cp -R app core config database public_html storage $DEPLOYPATH/
-    - /bin/test -f $DEPLOYPATH/config/.env || /bin/cp .env.example $DEPLOYPATH/config/.env
+    - export PHP_BIN=/usr/local/bin/php
+    - /bin/mkdir -p $DEPLOYPATH/config $DEPLOYPATH/storage/uploads $DEPLOYPATH/storage/logs
+
+    # --- 1. Back up an existing .env, so nothing can clobber it during copy ---
+    - /bin/test -f $DEPLOYPATH/config/.env && /bin/cp -p $DEPLOYPATH/config/.env $DEPLOYPATH/config/.env.deploybak || true
+
+    # --- 2. Application CODE (safe to overwrite every deploy) ---
+    #   cp -R merges and overwrites tracked files but never deletes, so
+    #   runtime data that is not part of the repo is left in place.
+    - /bin/cp -R app core config database public_html $DEPLOYPATH/
+
+    # --- 3. Restore the protected .env (guarantees it is never changed by a
+    #        deploy) and ship the template. The deploy does NOT create .env. ---
+    - /bin/test -f $DEPLOYPATH/config/.env.deploybak && /bin/mv -f $DEPLOYPATH/config/.env.deploybak $DEPLOYPATH/config/.env || true
+    - /bin/cp .env.example $DEPLOYPATH/config/.env.example
+
+    # --- 4. Install upload-dir execution guards only if missing ---
+    - /bin/test -f $DEPLOYPATH/storage/.htaccess || /bin/cp storage/.htaccess $DEPLOYPATH/storage/.htaccess
+    - /bin/test -f $DEPLOYPATH/storage/uploads/.htaccess || /bin/cp storage/uploads/.htaccess $DEPLOYPATH/storage/uploads/.htaccess
+
+    # --- 5. Permissions: dirs 755, files 644, storage writable, .env locked to owner ---
     - /bin/find $DEPLOYPATH -type d -exec chmod 755 {} +
     - /bin/find $DEPLOYPATH -type f -exec chmod 644 {} +
     - /bin/chmod -R 755 $DEPLOYPATH/storage
+    - /bin/test -f $DEPLOYPATH/config/.env && /bin/chmod 600 $DEPLOYPATH/config/.env || true
+
+    # --- 6. Auto-apply pending DB migrations (no-op when up to date; skips
+    #        safely if the DB is not configured yet). Never writes to .env. ---
+    - cd $DEPLOYPATH && $PHP_BIN database/migrate.php
