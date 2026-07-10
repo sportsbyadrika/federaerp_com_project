@@ -306,7 +306,7 @@
                     </div>
                 </div>
                 <div class="grid grid-cols-2 lg:grid-cols-4 gap-4">
-                    <div class="bg-white rounded-xl border border-slate-200 p-5"><div class="text-3xl font-semibold text-slate-800">{{ data.metrics.projects.active }}</div><div class="text-sm text-slate-500 mt-1">Active projects</div></div>
+                    <div class="bg-white rounded-xl border border-slate-200 p-5"><div class="text-3xl font-semibold text-slate-800">{{ data.metrics.projects.active }} <span class="text-lg text-slate-400">/ {{ data.metrics.projects.total }}</span></div><div class="text-sm text-slate-500 mt-1">Active projects <span class="text-slate-400">({{ data.metrics.projects.total }} total)</span></div></div>
                     <div class="bg-white rounded-xl border border-slate-200 p-5"><div class="text-3xl font-semibold text-emerald-600">{{ fmt(data.metrics.finance.income) }}</div><div class="text-sm text-slate-500 mt-1">Income</div></div>
                     <div class="bg-white rounded-xl border border-slate-200 p-5"><div class="text-3xl font-semibold text-rose-600">{{ fmt(data.metrics.finance.expense) }}</div><div class="text-sm text-slate-500 mt-1">Expense</div></div>
                     <div class="bg-white rounded-xl border border-slate-200 p-5"><div class="text-3xl font-semibold text-slate-800">{{ data.metrics.fleet.in_use }}/{{ data.metrics.fleet.total }}</div><div class="text-sm text-slate-500 mt-1">Fleet in use</div></div>
@@ -363,6 +363,7 @@
                 return [
                     { label: 'Dashboard', href: '#/' },
                     { label: 'Projects', href: '#/projects' },
+                    { label: 'Staff', href: '#/staff' },
                     { label: 'Expenditure', href: '#/expenditure' },
                     { label: 'Income', href: '#/income' },
                     { label: 'Documents', href: '#/documents' },

@@ -453,6 +453,11 @@ try {
     ]);
     $db->insert('attendance_logs', ['tenant_id' => DEMO_ORG, 'employee_id' => $empId, 'project_id' => $projectId, 'attendance_date' => '2026-06-01', 'status' => 'present', 'hours_worked' => 8]);
 
+    // ---- Staff master (workforce directory) -------------------------------
+    $db->insert('staff_members', ['tenant_id' => DEMO_ORG, 'staff_code' => 'STF-001', 'name' => 'Ramesh Kumar', 'phone' => '+91 90000 11111', 'email' => 'ramesh@skyline.test', 'staff_type' => 'office', 'address' => 'Kochi', 'pan' => 'ABCPR1234K', 'status' => 'active']);
+    $db->insert('staff_members', ['tenant_id' => DEMO_ORG, 'staff_code' => 'STF-002', 'name' => 'Anil Mason', 'phone' => '+91 90000 22222', 'staff_type' => 'skilled', 'address' => 'Ernakulam', 'status' => 'active']);
+    $db->insert('staff_members', ['tenant_id' => DEMO_ORG, 'staff_code' => 'STF-003', 'name' => 'Helper Team', 'staff_type' => 'unskilled', 'status' => 'active']);
+
     // ---- Expenditure + Income samples -------------------------------------
     $db->insert('expenditures', [
         'tenant_id' => DEMO_ORG, 'scope' => 'project', 'project_id' => $projectId,

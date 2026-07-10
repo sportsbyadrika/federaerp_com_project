@@ -47,9 +47,18 @@ final class DashboardService extends BaseService
                 'total'  => (int)$db->fetchColumn("SELECT COUNT(*) FROM projects WHERE tenant_id=:t AND deleted_at IS NULL", $p),
                 'active' => (int)$db->fetchColumn("SELECT COUNT(*) FROM projects WHERE tenant_id=:t AND status='active' AND deleted_at IS NULL", $p),
             ],
+            // Progress = share of a project's tasks that sit in a "done" column.
             'weekly_progress' => $db->fetchAll(
-                "SELECT id, name, code, project_type, progress_percent, status FROM projects
-                  WHERE tenant_id=:t AND deleted_at IS NULL ORDER BY progress_percent DESC LIMIT 6", $p
+                "SELECT p.id, p.name, p.code, p.project_type, p.status,
+                        COUNT(t.id) AS task_count,
+                        SUM(CASE WHEN ts.is_done = 1 THEN 1 ELSE 0 END) AS done_count,
+                        COALESCE(ROUND(100 * SUM(CASE WHEN ts.is_done = 1 THEN 1 ELSE 0 END) / NULLIF(COUNT(t.id), 0)), 0) AS progress_percent
+                   FROM projects p
+                   LEFT JOIN tasks t ON t.project_id = p.id AND t.deleted_at IS NULL
+                   LEFT JOIN task_statuses ts ON ts.id = t.status_id
+                  WHERE p.tenant_id = :t AND p.deleted_at IS NULL
+                  GROUP BY p.id, p.name, p.code, p.project_type, p.status
+                  ORDER BY progress_percent DESC, p.id DESC LIMIT 6", $p
             ),
             'fleet' => [
                 'total'       => (int)$db->fetchColumn("SELECT COUNT(*) FROM vehicles_machinery WHERE tenant_id=:t AND deleted_at IS NULL", $p),

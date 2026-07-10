@@ -305,6 +305,31 @@ check('currency: default is set and mirrored to the organisation', function () u
     return $now['code'] === 'EUR' && (string)$db->fetchColumn('SELECT currency_symbol FROM organisations WHERE id=?', [DEMO]) === '€';
 });
 
+fwrite(STDOUT, "\n[11] Staff master + dashboard task-based progress\n");
+check('staff: tenant-scoped CRUD via master resource', function () use ($db) {
+    $m = new \App\Models\GenericModel('staff_members', ['tenant_id','staff_code','name','phone','email','staff_type','address','pan','status'], softDelete: true);
+    if (count($m->forTenant(DEMO)) < 3) return false;              // seeded rows
+    $id = $m->create(['tenant_id' => DEMO, 'staff_code' => 'STF-900', 'name' => 'Test Staff', 'staff_type' => 'skilled', 'pan' => 'ZZZPT9999Z']);
+    $row = $m->findOrFail($id, DEMO);
+    if ($row['staff_type'] !== 'skilled' || $row['pan'] !== 'ZZZPT9999Z') return false;
+    $m->update($id, DEMO, ['staff_type' => 'unskilled', 'phone' => '999']);
+    if ($m->findOrFail($id, DEMO)['staff_type'] !== 'unskilled') return false;
+    $m->delete($id, DEMO);
+    try { $m->findOrFail($id, DEMO); return false; } catch (ServiceException $e) { /* soft-deleted */ }
+    try { $m->findOrFail(999999, DEMO); return false; } catch (ServiceException $e) { return $e->code() === 'not_found'; }
+});
+check('dashboard: weekly progress derives from tasks in a done column', function () use ($db, $projectId) {
+    $data = (new \App\Services\DashboardService())->tenant(DEMO);
+    $row = null;
+    foreach ($data['weekly_progress'] as $r) { if ((int)$r['id'] === $projectId) { $row = $r; break; } }
+    if ($row === null) return false;
+    // Compute the expectation directly from tasks/task_statuses.is_done.
+    $total = (int)$db->fetchColumn('SELECT COUNT(*) FROM tasks WHERE tenant_id=? AND project_id=? AND deleted_at IS NULL', [DEMO, $projectId]);
+    $done = (int)$db->fetchColumn('SELECT COUNT(*) FROM tasks t JOIN task_statuses s ON s.id=t.status_id WHERE t.tenant_id=? AND t.project_id=? AND t.deleted_at IS NULL AND s.is_done=1', [DEMO, $projectId]);
+    $expected = $total ? (int)round(100 * $done / $total) : 0;
+    return (int)$row['progress_percent'] === $expected && $total > 0;
+});
+
 // ---- summary ---------------------------------------------------------------
 fwrite(STDOUT, "\n" . str_repeat('─', 50) . "\n");
 fwrite(STDOUT, "Passed: {$passed}  Failed: {$failed}\n");
