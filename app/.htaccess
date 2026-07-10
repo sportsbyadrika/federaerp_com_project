@@ -1,0 +1,13 @@
+# Application code — never served over HTTP. index.php includes these from
+# disk, so denying web access is always safe and adds defense-in-depth in case
+# the Document Root is ever misconfigured to the project root.
+<IfModule mod_authz_core.c>
+    Require all denied
+</IfModule>
+<IfModule !mod_authz_core.c>
+    Order allow,deny
+    Deny from all
+</IfModule>
+<IfModule mod_php.c>
+    php_flag engine off
+</IfModule>

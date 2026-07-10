@@ -1,0 +1,30 @@
+# ==========================================================================
+# PROJECT-ROOT .htaccess  (/home/olympicd/federaerp.com/.htaccess)
+#
+# This is a SAFETY NET for the case where the domain's Document Root is the
+# project root instead of .../public_html. It (1) blocks direct web access to
+# the private application directories and secrets, and (2) routes every request
+# into the app's public web root so the front controller (public_html/index.php)
+# runs and the autoloader loads.
+#
+# PREFERRED FIX is still to set the Document Root to
+#   /home/olympicd/federaerp.com/public_html
+# in cPanel -> Domains. When that is set, this file lives ABOVE the web root and
+# is simply ignored — so keeping it here is harmless either way.
+# ==========================================================================
+
+# 1) Block private directories + secret files from direct web access.
+RedirectMatch 403 ^/(app|core|config|database|storage|tests|docs)(/|$)
+RedirectMatch 403 (^|/)\.(env|git)
+
+# 2) Route all traffic through the app's public web root.
+<IfModule mod_rewrite.c>
+    RewriteEngine On
+    RewriteBase /
+
+    # Leave requests that already resolve inside public_html alone.
+    RewriteCond %{REQUEST_URI} !^/public_html/
+    RewriteRule ^(.*)$ public_html/$1 [L]
+</IfModule>
+
+Options -Indexes

@@ -40,6 +40,10 @@ deployment:
     #   cp -R merges and overwrites tracked files but never deletes, so
     #   runtime data that is not part of the repo is left in place.
     - /bin/cp -R app core config database public_html $DEPLOYPATH/
+    # Project-root safety-net .htaccess (routes into public_html + blocks the
+    # private dirs if the Document Root is ever the project root; ignored when
+    # the Document Root is correctly set to .../public_html).
+    - /bin/cp .htaccess $DEPLOYPATH/.htaccess
 
     # --- 3. Restore the protected .env (guarantees it is never changed by a
     #        deploy) and ship the template. The deploy does NOT create .env. ---
