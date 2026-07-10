@@ -19,6 +19,7 @@
         flash: null,            // { type:'success'|'error', message }
         config: { captcha_enabled: false, recaptcha_site_key: '', app_name: '' },
         currency: { code: 'USD', symbol: '$' },
+        org: null,              // authenticated user's institution (name, logo) for the navbar
         // shared lookups cached in-memory (never localStorage for app state)
         projects: [],
         activeProjectId: null,
@@ -47,6 +48,7 @@
     }
     loadConfig();
     loadCurrency();   // no-op if not authenticated (session bootstrap sets store.user)
+    loadOrg();
 
     // Format money with the tenant's default currency symbol.
     function money(n) {
@@ -56,6 +58,12 @@
     async function loadCurrency() {
         if (!store.user) return;
         try { store.currency = (await api.get('/api/settings')).data.currency; } catch (e) { /* keep default */ }
+    }
+    // Institution identity for the navbar (name + logo). Skipped for the
+    // platform Super Admin org, which keeps the generic product name.
+    async function loadOrg() {
+        if (!store.user || store.user.role === 'super_admin') { store.org = null; return; }
+        try { store.org = (await api.get('/api/organisation')).data; } catch (e) { store.org = null; }
     }
 
     function isAuthed() { return !!store.user; }
@@ -74,7 +82,7 @@
     // Route registry: path (string or regex) -> component name.
     const routes = [];
     const CSApp = {
-        store, navigate, flash, isAuthed, role, isSuperAdmin, money, loadCurrency,
+        store, navigate, flash, isAuthed, role, isSuperAdmin, money, loadCurrency, loadOrg,
         /** Register a route + its global component definition. */
         route(path, componentName, componentDef) {
             routes.push({ path, name: componentName });

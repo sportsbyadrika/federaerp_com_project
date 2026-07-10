@@ -64,6 +64,7 @@
                     api.setCsrf(r.data.csrf_token);
                     store.user = r.data.user;
                     if (r.data.currency) store.currency = r.data.currency;
+                    CSApp.loadOrg();
                     CSApp.navigate('/');
                 } catch (e) { error.value = e.message || 'Login failed'; }
                 finally { busy.value = false; }
@@ -314,7 +315,7 @@
                     <div class="bg-white rounded-xl border border-slate-200 p-5">
                         <h2 class="font-medium text-slate-700 mb-3">Weekly project progress</h2>
                         <div v-for="p in data.metrics.weekly_progress" :key="p.id" class="mb-3">
-                            <div class="flex justify-between text-sm mb-1"><span class="text-slate-600">{{ p.name }}</span><span class="text-slate-400">{{ p.progress_percent }}%</span></div>
+                            <div class="flex justify-between text-sm mb-1"><span class="text-slate-600"><span v-if="p.code" class="font-mono text-xs text-slate-400 mr-1">{{ p.code }}</span>{{ p.name }}<span v-if="p.project_type" class="text-slate-400"> ({{ p.project_type }})</span></span><span class="text-slate-400">{{ p.progress_percent }}%</span></div>
                             <div class="h-2 bg-slate-100 rounded-full overflow-hidden"><div class="h-full bg-brand rounded-full" :style="{width: p.progress_percent + '%'}"></div></div>
                         </div>
                         <p v-if="!data.metrics.weekly_progress.length" class="text-sm text-slate-400 py-4 text-center">No projects yet</p>
@@ -372,7 +373,7 @@
 
             async function logout() {
                 try { await api.post('/api/auth/logout', {}); } catch (e) {}
-                store.user = null; location.hash = '#/';
+                store.user = null; store.org = null; location.hash = '#/';
             }
             async function submitChangePassword() {
                 pwErr.value = null; pwMsg.value = null; busy.value = true;
@@ -401,7 +402,11 @@
                 <div class="w-full px-4 sm:px-6 h-14 flex items-center justify-between">
                     <div class="flex items-center gap-3">
                         <button class="sm:hidden p-2 -ml-2 text-slate-600" @click="menuOpen=!menuOpen"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 6h16M4 12h16M4 18h16"/></svg></button>
-                        <a href="#/" class="flex items-center gap-2 font-semibold text-slate-800"><span class="inline-flex h-8 w-8 items-center justify-center rounded-lg bg-brand text-white text-sm">CS</span><span class="hidden sm:inline">{{ store.appName }}</span></a>
+                        <a href="#/" class="flex items-center gap-2 font-semibold text-slate-800">
+                            <img v-if="store.org && store.org.has_logo" src="/api/organisation/logo" alt="logo" class="h-8 w-8 rounded-lg object-contain bg-white border border-slate-100">
+                            <span v-else class="inline-flex h-8 w-8 items-center justify-center rounded-lg bg-brand text-white text-sm">{{ ((store.org && store.org.name) || store.appName || 'CS').charAt(0).toUpperCase() }}</span>
+                            <span class="hidden sm:inline">{{ (store.org && store.org.name) || store.appName }}</span>
+                        </a>
                         <nav class="hidden sm:flex items-center gap-1 ml-4">
                             <a v-for="m in menu" :key="m.href" :href="m.href" class="px-3 py-1.5 rounded-md text-sm text-slate-600 hover:bg-slate-100 hover:text-slate-900">{{ m.label }}</a>
                         </nav>

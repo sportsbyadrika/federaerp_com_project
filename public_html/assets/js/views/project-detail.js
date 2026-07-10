@@ -163,6 +163,12 @@
                 Object.assign(stageForm, { phase_no: s.phase_no, details: s.details, percentage: s.percentage, amount: s.amount });
                 showStageModal.value = true;
             }
+            // Entering a percentage derives the amount from the contract value.
+            function onStagePercentChange() {
+                const cv = +project.contract_value || 0;
+                const pct = +stageForm.percentage || 0;
+                stageForm.amount = Math.round(cv * pct / 100 * 100) / 100;
+            }
             async function saveStage() {
                 if (!stageForm.details) { CSApp.flash('error', 'Details are required'); return; }
                 saving.value = true;
@@ -183,7 +189,7 @@
             return { FLOOR_CATALOG, id, tab, loading, saving, project, clients, currencies, floors, selectedCodes, entries, boqTotal,
                 masterItems, stages, nf, pmoney, lineSum, onCurrencyChange, saveDetails, saveFloors,
                 showModal, editingId, form, modalLines, modalRowAmount, modalTotal, openAdd, openEdit, onPickMaster, saveEntry, deleteEntry,
-                stagesGrand, stagesDiff, showStageModal, editingStageId, stageForm, openStageAdd, openStageEdit, saveStage, deleteStage };
+                stagesGrand, stagesDiff, showStageModal, editingStageId, stageForm, openStageAdd, openStageEdit, saveStage, deleteStage, onStagePercentChange };
         },
         template: `
         <div v-if="loading" class="text-slate-400 text-sm py-10 text-center">Loading project…</div>
@@ -339,10 +345,10 @@
                     <div class="space-y-3">
                         <div class="grid grid-cols-2 gap-3">
                             <div><label class="block text-xs text-slate-500 mb-1">Phase No.</label><input v-model.number="stageForm.phase_no" type="number" class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"></div>
-                            <div><label class="block text-xs text-slate-500 mb-1">Percentage (%)</label><input v-model.number="stageForm.percentage" type="number" step="0.01" class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"></div>
+                            <div><label class="block text-xs text-slate-500 mb-1">Percentage (%)</label><input v-model.number="stageForm.percentage" @input="onStagePercentChange" type="number" step="0.01" class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"></div>
                         </div>
                         <div><label class="block text-xs text-slate-500 mb-1">Details</label><textarea v-model="stageForm.details" rows="2" class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-brand/40 focus:border-brand"></textarea></div>
-                        <div><label class="block text-xs text-slate-500 mb-1">Amount</label><input v-model.number="stageForm.amount" type="number" step="0.01" class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"></div>
+                        <div><label class="block text-xs text-slate-500 mb-1">Amount <span class="text-slate-400">(auto from % × contract value {{ pmoney(project.contract_value) }})</span></label><input v-model.number="stageForm.amount" type="number" step="0.01" class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"></div>
                     </div>
                     <div class="flex justify-end gap-2 mt-5">
                         <button @click="showStageModal=false" class="px-4 py-2 text-sm rounded-lg border border-slate-300 text-slate-600">Cancel</button>
