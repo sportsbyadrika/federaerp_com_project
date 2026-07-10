@@ -51,7 +51,9 @@ return function (Router $router, array $auth, array $write): void {
         $r->get('/projects/{id}/floors', 'ProjectController@floors', $auth);
         $r->post('/projects/{id}/floors', 'ProjectController@setFloors', $write);
         $r->get('/projects/{id}/boq', 'ProjectController@boq', $auth);
-        $r->post('/projects/{id}/boq', 'ProjectController@saveBoq', $write);
+        $r->post('/projects/{id}/boq', 'ProjectController@createBoqEntry', $write);
+        $r->put('/boq-entries/{id}', 'ProjectController@updateBoqEntry', $write);
+        $r->delete('/boq-entries/{id}', 'ProjectController@deleteBoqEntry', $write);
 
         // ---- Kanban tasks -------------------------------------------------
         $r->get('/projects/{id}/board', 'TaskController@board', $auth);
@@ -109,8 +111,15 @@ return function (Router $router, array $auth, array $write): void {
         // ---- Reports (JSON definition, or ?format=csv) --------------------
         $r->get('/reports/{report}', 'ReportController@show', $auth);
 
+        // ---- Currencies + settings ----------------------------------------
+        $r->get('/settings', 'CurrencyController@settings', $auth);
+        $r->get('/currencies', 'CurrencyController@index', $auth);
+        $r->post('/currencies', 'CurrencyController@store', $write);
+        $r->post('/currencies/{id}/default', 'CurrencyController@setDefault', $write);
+        $r->delete('/currencies/{id}', 'CurrencyController@destroy', $write);
+
         // ---- Master data (generic tenant-scoped CRUD) ---------------------
-        $resources = ['clients','suppliers','construction-models','base-rates','materials','subcontractors','vehicles','employees'];
+        $resources = ['clients','suppliers','construction-models','base-rates','materials','subcontractors','vehicles','employees','unit-types','boq-items'];
         foreach ($resources as $res) {
             $r->get("/{$res}", 'MasterDataController@index', $auth);
             $r->get("/{$res}/{id}", 'MasterDataController@show', $auth);

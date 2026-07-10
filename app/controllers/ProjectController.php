@@ -106,17 +106,30 @@ final class ProjectController extends Controller
         $this->guard(fn() => Response::success($this->service->setFloors((int)$request->tenantId(), (int)$request->param('id'), $request->input('floors', []))));
     }
 
-    // ---- BOQ ----
+    // ---- BOQ (entry + per-floor lines) ----
     public function boq(Request $request): void
     {
         $this->guard(fn() => Response::success($this->service->listBoq((int)$request->tenantId(), (int)$request->param('id'))));
     }
 
-    public function saveBoq(Request $request): void
+    public function createBoqEntry(Request $request): void
     {
-        $data = $this->validate($request, ['items' => 'required|array']);
+        $data = $this->validate($request, ['item_head' => 'required|string|max:160', 'lines' => 'required|array']);
         if ($data === null) return;
-        $this->guard(fn() => Response::success($this->service->saveBoq((int)$request->tenantId(), (int)$request->param('id'), $request->input('items', []))));
+        $this->guard(fn() => Response::success($this->service->saveBoqEntry((int)$request->tenantId(), (int)$request->param('id'), $request->all()), [], 201));
+    }
+
+    public function updateBoqEntry(Request $request): void
+    {
+        $this->guard(fn() => Response::success($this->service->updateBoqEntry((int)$request->tenantId(), (int)$request->param('id'), $request->all())));
+    }
+
+    public function deleteBoqEntry(Request $request): void
+    {
+        $this->guard(function () use ($request) {
+            $this->service->deleteBoqEntry((int)$request->tenantId(), (int)$request->param('id'));
+            Response::success(['message' => 'BOQ item deleted']);
+        });
     }
 
     // ---- Daily site checklists ----

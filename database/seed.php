@@ -54,8 +54,8 @@ try {
     ]);
     $db->insert('organisations', [
         'id' => DEMO_ORG, 'name' => 'Skyline Builders Ltd', 'legal_name' => 'Skyline Builders Limited',
-        'email' => 'info@skyline.example', 'city' => 'Metro City', 'country' => 'USA',
-        'currency' => 'USD', 'status' => 'active',
+        'email' => 'info@skyline.example', 'city' => 'Metro City', 'country' => 'India',
+        'currency' => 'INR', 'currency_symbol' => '₹', 'status' => 'active',
     ]);
 
     // ---- Users ------------------------------------------------------------
@@ -153,19 +153,48 @@ try {
             'tenant_id' => DEMO_ORG, 'project_id' => $projectId, 'code' => $code, 'label' => $label, 'sort_order' => $ord,
         ]);
     }
-    $boq = [
-        [$floorIds['GF'], 'CIV-01', 'RCC framing', 'cu.m', 120, 180],
-        [$floorIds['GF'], 'MAS-01', 'Brick masonry', 'sq.m', 400, 32],
-        [$floorIds['F1'], 'CIV-01', 'RCC framing', 'cu.m', 95, 180],
-        [$floorIds['F2'], 'CIV-01', 'RCC framing', 'cu.m', 95, 180],
-        [null, 'GEN-01', 'Site mobilization (project-wide)', 'lot', 1, 15000],
+    // BOQ entries with per-floor lines (new model).
+    $boqEntries = [
+        ['CIV-01', 'RCC Framing', 'Reinforced cement concrete framing', 'cu.m',
+            [[$floorIds['GF'], 120, 180], [$floorIds['F1'], 95, 180], [$floorIds['F2'], 95, 180]]],
+        ['MAS-01', 'Brick Masonry', 'Brick masonry in cement mortar 1:6', 'sq.m',
+            [[$floorIds['GF'], 400, 32]]],
+        ['GEN-01', 'Site Mobilization', 'Mobilization, setup and site establishment', 'lot',
+            [[null, 1, 15000]]],
     ];
-    $ord = 0;
-    foreach ($boq as [$fid, $code, $desc, $unit, $qty, $rate]) {
-        $db->insert('boq_items', [
-            'tenant_id' => DEMO_ORG, 'project_id' => $projectId, 'project_floor_id' => $fid,
-            'item_code' => $code, 'description' => $desc, 'unit' => $unit,
-            'quantity' => $qty, 'rate' => $rate, 'amount' => round($qty * $rate, 2), 'sort_order' => $ord++,
+    $eord = 0;
+    foreach ($boqEntries as [$code, $head, $desc, $unit, $lines]) {
+        $entryId = $db->insert('boq_entries', [
+            'tenant_id' => DEMO_ORG, 'project_id' => $projectId, 'item_code' => $code,
+            'item_head' => $head, 'description' => $desc, 'unit' => $unit, 'sort_order' => $eord++,
+        ]);
+        $lord = 0;
+        foreach ($lines as [$fid, $qty, $rate]) {
+            $db->insert('boq_lines', [
+                'tenant_id' => DEMO_ORG, 'boq_entry_id' => $entryId, 'project_floor_id' => $fid,
+                'quantity' => $qty, 'rate' => $rate, 'amount' => round($qty * $rate, 2), 'sort_order' => $lord++,
+            ]);
+        }
+    }
+
+    // Settings masters: unit types, currencies, BOQ item master.
+    $uord = 0;
+    foreach (['cu.m', 'sq.m', 'sq.ft', 'nos', 'bag', 'kg', 'lot', 'hour'] as $u) {
+        $db->insert('unit_types', ['tenant_id' => DEMO_ORG, 'name' => $u, 'sort_order' => $uord++]);
+    }
+    $db->insert('currencies', ['tenant_id' => DEMO_ORG, 'code' => 'INR', 'symbol' => '₹', 'is_default' => 1]);
+    $db->insert('currencies', ['tenant_id' => DEMO_ORG, 'code' => 'USD', 'symbol' => '$', 'is_default' => 0]);
+    $masterItems = [
+        ['new', 'CIV-01', 'RCC Framing', 'Reinforced cement concrete framing including formwork and steel', 'cu.m', 180],
+        ['new', 'MAS-01', 'Brick Masonry', 'Brick masonry in cement mortar 1:6', 'sq.m', 32],
+        ['new', 'PLA-01', 'Plastering', 'Internal/external cement plaster 12mm', 'sq.m', 14],
+        ['renovation', 'DEM-01', 'Demolition', 'Careful demolition and debris removal', 'cu.m', 45],
+        ['any', 'GEN-01', 'Site Mobilization', 'Mobilization, setup and site establishment', 'lot', 15000],
+    ];
+    foreach ($masterItems as [$ptype, $code, $head, $desc, $unit, $rate]) {
+        $db->insert('boq_item_master', [
+            'tenant_id' => DEMO_ORG, 'project_type' => $ptype, 'item_code' => $code,
+            'item_head' => $head, 'description' => $desc, 'unit' => $unit, 'default_rate' => $rate,
         ]);
     }
 

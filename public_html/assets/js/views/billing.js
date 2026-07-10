@@ -24,7 +24,7 @@
             const raForm = reactive({ work_order_id: null, certified_percent: 0 });
             const newDN = reactive({ amount: 0, note_type: 'standard', due_date: '', description: '' });
 
-            const fmt = (n) => new Intl.NumberFormat(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(n || 0);
+            const fmt = (n) => CSApp.money(n);
 
             async function loadProjects() {
                 loading.value = true;

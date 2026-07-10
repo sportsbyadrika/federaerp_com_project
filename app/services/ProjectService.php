@@ -18,7 +18,8 @@ final class ProjectService extends BaseService
     private GenericModel $checklists;
     private GenericModel $checklistItems;
     private GenericModel $floors;
-    private GenericModel $boq;
+    private GenericModel $boqEntries;
+    private GenericModel $boqLines;
 
     public function __construct()
     {
@@ -37,7 +38,8 @@ final class ProjectService extends BaseService
             'contract_value', 'start_date', 'end_date', 'status', 'progress_percent', 'project_manager_id',
         ], softDelete: true);
         $this->floors = new GenericModel('project_floors', ['tenant_id', 'project_id', 'code', 'label', 'sort_order']);
-        $this->boq = new GenericModel('boq_items', ['tenant_id', 'project_id', 'project_floor_id', 'item_code', 'description', 'unit', 'quantity', 'rate', 'amount', 'sort_order']);
+        $this->boqEntries = new GenericModel('boq_entries', ['tenant_id', 'project_id', 'boq_item_master_id', 'item_code', 'item_head', 'description', 'unit', 'sort_order']);
+        $this->boqLines = new GenericModel('boq_lines', ['tenant_id', 'boq_entry_id', 'project_floor_id', 'quantity', 'rate', 'amount', 'sort_order']);
         $this->statuses = new GenericModel('task_statuses', [
             'tenant_id', 'project_id', 'name', 'color', 'position', 'is_done',
         ]);
@@ -204,63 +206,106 @@ final class ProjectService extends BaseService
         return $this->listFloors($tenantId, $projectId);
     }
 
-    // ---- Bill of Quantities (BOQ) -----------------------------------------
+    // ---- Bill of Quantities (BOQ): entry + per-floor lines ----------------
     public function listBoq(int $tenantId, int $projectId): array
     {
-        $rows = Database::instance()->fetchAll(
-            'SELECT b.*, f.code AS floor_code, f.label AS floor_label
-               FROM boq_items b
-               LEFT JOIN project_floors f ON f.id = b.project_floor_id
-              WHERE b.tenant_id = :t AND b.project_id = :p
-              ORDER BY b.sort_order ASC, b.id ASC',
-            [':t' => $tenantId, ':p' => $projectId]
-        );
+        $entries = $this->boqEntries->forTenant($tenantId, ['project_id' => $projectId], ['order_by' => 'sort_order', 'order_dir' => 'ASC']);
         $total = 0.0;
-        foreach ($rows as $r) { $total += (float)$r['amount']; }
-        return ['items' => $rows, 'total' => round($total, 2)];
+        foreach ($entries as &$e) {
+            $e['lines'] = $this->entryLines($tenantId, (int)$e['id']);
+            $et = 0.0;
+            foreach ($e['lines'] as $l) { $et += (float)$l['amount']; }
+            $e['entry_total'] = round($et, 2);
+            $total += $et;
+        }
+        unset($e);
+        return ['entries' => $entries, 'total' => round($total, 2)];
     }
 
-    /**
-     * Replace the whole BOQ for a project with the provided items (editable
-     * grid save). Each item: {project_floor_id?, item_code, description, unit,
-     * quantity, rate}. Amount is computed server-side.
-     */
-    public function saveBoq(int $tenantId, int $projectId, array $items): array
+    /** Create one BOQ entry (item) with its per-floor lines. */
+    public function saveBoqEntry(int $tenantId, int $projectId, array $input): array
     {
         $this->projects->findOrFail($projectId, $tenantId);
-        // Validate floor ownership up front.
-        $validFloorIds = [];
-        foreach ($this->floors->forTenant($tenantId, ['project_id' => $projectId]) as $f) {
-            $validFloorIds[(int)$f['id']] = true;
-        }
         $db = Database::instance();
         $db->beginTransaction();
         try {
-            $db->execute('DELETE FROM boq_items WHERE tenant_id = :t AND project_id = :p', [':t' => $tenantId, ':p' => $projectId]);
-            $order = 0;
-            foreach ($items as $it) {
-                $desc = trim((string)($it['description'] ?? ''));
-                if ($desc === '') continue;
-                $floorId = isset($it['project_floor_id']) && $it['project_floor_id'] !== '' && $it['project_floor_id'] !== null
-                    ? (int)$it['project_floor_id'] : null;
-                if ($floorId !== null && !isset($validFloorIds[$floorId])) {
-                    $floorId = null; // ignore floors that don't belong to this project
-                }
-                $qty = (float)($it['quantity'] ?? 0);
-                $rate = (float)($it['rate'] ?? 0);
-                $this->boq->create([
-                    'tenant_id' => $tenantId, 'project_id' => $projectId, 'project_floor_id' => $floorId,
-                    'item_code' => $it['item_code'] ?? null, 'description' => $desc,
-                    'unit' => $it['unit'] ?? null, 'quantity' => $qty, 'rate' => $rate,
-                    'amount' => round($qty * $rate, 2), 'sort_order' => $order++,
-                ]);
-            }
+            $order = (int)$db->fetchColumn('SELECT COALESCE(MAX(sort_order),-1)+1 FROM boq_entries WHERE tenant_id=? AND project_id=?', [$tenantId, $projectId]);
+            $entryId = $this->boqEntries->create([
+                'tenant_id' => $tenantId, 'project_id' => $projectId,
+                'boq_item_master_id' => $input['boq_item_master_id'] ?? null,
+                'item_code' => $input['item_code'] ?? null, 'item_head' => (string)($input['item_head'] ?? 'Item'),
+                'description' => $input['description'] ?? null, 'unit' => $input['unit'] ?? null, 'sort_order' => $order,
+            ]);
+            $this->replaceLines($tenantId, $projectId, $entryId, $input['lines'] ?? []);
             $db->commit();
         } catch (\Throwable $e) {
             $db->rollBack();
             throw $e;
         }
-        return $this->listBoq($tenantId, $projectId);
+        return $this->getBoqEntry($tenantId, $entryId);
+    }
+
+    /** Update a BOQ entry + replace its lines. */
+    public function updateBoqEntry(int $tenantId, int $entryId, array $input): array
+    {
+        $entry = $this->boqEntries->findOrFail($entryId, $tenantId);
+        $this->boqEntries->update($entryId, $tenantId, [
+            'boq_item_master_id' => $input['boq_item_master_id'] ?? $entry['boq_item_master_id'],
+            'item_code'   => $input['item_code'] ?? $entry['item_code'],
+            'item_head'   => $input['item_head'] ?? $entry['item_head'],
+            'description' => $input['description'] ?? $entry['description'],
+            'unit'        => $input['unit'] ?? $entry['unit'],
+        ]);
+        if (array_key_exists('lines', $input)) {
+            $this->replaceLines($tenantId, (int)$entry['project_id'], $entryId, $input['lines']);
+        }
+        return $this->getBoqEntry($tenantId, $entryId);
+    }
+
+    public function deleteBoqEntry(int $tenantId, int $entryId): void
+    {
+        $this->boqEntries->findOrFail($entryId, $tenantId);
+        $this->boqEntries->delete($entryId, $tenantId); // cascade removes lines
+    }
+
+    private function getBoqEntry(int $tenantId, int $entryId): array
+    {
+        $e = $this->boqEntries->findOrFail($entryId, $tenantId);
+        $e['lines'] = $this->entryLines($tenantId, $entryId);
+        $e['entry_total'] = round(array_sum(array_map(static fn($l) => (float)$l['amount'], $e['lines'])), 2);
+        return $e;
+    }
+
+    private function entryLines(int $tenantId, int $entryId): array
+    {
+        return Database::instance()->fetchAll(
+            'SELECT l.*, f.code AS floor_code, f.label AS floor_label
+               FROM boq_lines l LEFT JOIN project_floors f ON f.id = l.project_floor_id
+              WHERE l.tenant_id = :t AND l.boq_entry_id = :e ORDER BY l.sort_order ASC, l.id ASC',
+            [':t' => $tenantId, ':e' => $entryId]
+        );
+    }
+
+    private function replaceLines(int $tenantId, int $projectId, int $entryId, array $lines): void
+    {
+        $db = Database::instance();
+        $db->execute('DELETE FROM boq_lines WHERE tenant_id = ? AND boq_entry_id = ?', [$tenantId, $entryId]);
+        $valid = [];
+        foreach ($this->floors->forTenant($tenantId, ['project_id' => $projectId]) as $f) {
+            $valid[(int)$f['id']] = true;
+        }
+        $ord = 0;
+        foreach ($lines as $l) {
+            $fid = isset($l['project_floor_id']) && $l['project_floor_id'] !== '' && $l['project_floor_id'] !== null ? (int)$l['project_floor_id'] : null;
+            if ($fid !== null && !isset($valid[$fid])) { $fid = null; }
+            $qty = (float)($l['quantity'] ?? 0);
+            $rate = (float)($l['rate'] ?? 0);
+            if ($qty == 0.0 && $rate == 0.0) { continue; }
+            $this->boqLines->create([
+                'tenant_id' => $tenantId, 'boq_entry_id' => $entryId, 'project_floor_id' => $fid,
+                'quantity' => $qty, 'rate' => $rate, 'amount' => round($qty * $rate, 2), 'sort_order' => $ord++,
+            ]);
+        }
     }
 
     // ---- Work progress logs ----------------------------------------------

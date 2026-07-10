@@ -43,6 +43,17 @@ final class MasterDataController extends Controller
             'fillable' => ['tenant_id','code','name','category','unit','unit_price','reorder_level'],
             'required' => ['code' => 'required|string|max:60', 'name' => 'required|string|max:160', 'unit' => 'required|string|max:30'],
         ],
+        'unit-types' => [
+            'table' => 'unit_types', 'soft' => false,
+            'fillable' => ['tenant_id','name','sort_order'],
+            'required' => ['name' => 'required|string|max:40'],
+        ],
+        'boq-items' => [
+            'table' => 'boq_item_master', 'soft' => true,
+            'fillable' => ['tenant_id','project_type','item_code','item_head','description','unit','default_rate','is_active'],
+            'required' => ['project_type' => 'required|in:new,renovation,any', 'item_code' => 'required|string|max:60', 'item_head' => 'required|string|max:160'],
+            'filters' => ['project_type'],
+        ],
         'subcontractors' => [
             'table' => 'subcontractors', 'soft' => true,
             'fillable' => ['tenant_id','name','trade','contact_person','email','phone','tax_number'],
@@ -64,7 +75,15 @@ final class MasterDataController extends Controller
     {
         $cfg = $this->resource($request);
         $model = $this->model($cfg);
-        $this->guard(fn() => Response::success($model->forTenant((int)$request->tenantId(), [], ['order_by' => 'id', 'order_dir' => 'DESC'])));
+        // Apply whitelisted query filters (e.g. ?project_type=new).
+        $where = [];
+        foreach (($cfg['filters'] ?? []) as $col) {
+            $val = $request->query($col);
+            if ($val !== null && $val !== '') {
+                $where[$col] = $val;
+            }
+        }
+        $this->guard(fn() => Response::success($model->forTenant((int)$request->tenantId(), $where, ['order_by' => 'id', 'order_dir' => 'DESC'])));
     }
 
     public function show(Request $request): void

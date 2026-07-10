@@ -52,6 +52,7 @@ final class AuthController extends Controller
             $user = $this->auth->login($data['email'], $data['password']);
             Response::success([
                 'user'       => $user,
+                'currency'   => $this->auth->orgCurrency((int)$user['organisation_id']),
                 'csrf_token' => Csrf::token(),
             ]);
         });
@@ -115,8 +116,10 @@ final class AuthController extends Controller
     /** GET /api/auth/me — current user. */
     public function me(Request $request): void
     {
+        $user = $request->user();
         Response::success([
-            'user'       => $request->user(),
+            'user'       => $user,
+            'currency'   => $user ? $this->auth->orgCurrency((int)$user['organisation_id']) : ['code' => 'USD', 'symbol' => '$'],
             'csrf_token' => Csrf::token(),
         ]);
     }

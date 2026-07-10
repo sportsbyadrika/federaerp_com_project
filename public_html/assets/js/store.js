@@ -18,6 +18,7 @@
         params: {},
         flash: null,            // { type:'success'|'error', message }
         config: { captcha_enabled: false, recaptcha_site_key: '', app_name: '' },
+        currency: { code: 'USD', symbol: '$' },
         // shared lookups cached in-memory (never localStorage for app state)
         projects: [],
         activeProjectId: null,
@@ -45,6 +46,17 @@
         } catch (e) { /* keep defaults */ }
     }
     loadConfig();
+    loadCurrency();   // no-op if not authenticated (session bootstrap sets store.user)
+
+    // Format money with the tenant's default currency symbol.
+    function money(n) {
+        const v = new Intl.NumberFormat(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(n || 0);
+        return (store.currency.symbol || '') + v;
+    }
+    async function loadCurrency() {
+        if (!store.user) return;
+        try { store.currency = (await api.get('/api/settings')).data.currency; } catch (e) { /* keep default */ }
+    }
 
     function isAuthed() { return !!store.user; }
     function role() { return store.user ? store.user.role : null; }
@@ -62,7 +74,7 @@
     // Route registry: path (string or regex) -> component name.
     const routes = [];
     const CSApp = {
-        store, navigate, flash, isAuthed, role, isSuperAdmin,
+        store, navigate, flash, isAuthed, role, isSuperAdmin, money, loadCurrency,
         /** Register a route + its global component definition. */
         route(path, componentName, componentDef) {
             routes.push({ path, name: componentName });

@@ -59,7 +59,7 @@
             const marginAmt = computed(() => round2((subtotal.value + overheadAmt.value) * (parseFloat(margin.value) || 0) / 100));
             const grandTotal = computed(() => round2(subtotal.value + overheadAmt.value + marginAmt.value));
             function round2(n) { return Math.round((n + Number.EPSILON) * 100) / 100; }
-            const fmt = (n) => new Intl.NumberFormat(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(n || 0);
+            const fmt = (n) => CSApp.money(n);
 
             // ---- drag reorder ----
             function onDragStart(i) { dragIndex.value = i; }
