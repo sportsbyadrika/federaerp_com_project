@@ -48,6 +48,10 @@ return function (Router $router, array $auth, array $write): void {
         $r->post('/progress', 'ProjectController@logProgress', $write);
         $r->get('/projects/{id}/checklists', 'ProjectController@checklists', $auth);
         $r->post('/checklists', 'ProjectController@saveChecklist', $write);
+        $r->get('/projects/{id}/floors', 'ProjectController@floors', $auth);
+        $r->post('/projects/{id}/floors', 'ProjectController@setFloors', $write);
+        $r->get('/projects/{id}/boq', 'ProjectController@boq', $auth);
+        $r->post('/projects/{id}/boq', 'ProjectController@saveBoq', $write);
 
         // ---- Kanban tasks -------------------------------------------------
         $r->get('/projects/{id}/board', 'TaskController@board', $auth);

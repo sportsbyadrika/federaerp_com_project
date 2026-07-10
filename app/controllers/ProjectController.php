@@ -93,6 +93,32 @@ final class ProjectController extends Controller
         $this->guard(fn() => Response::success($this->service->logProgress((int)$request->tenantId(), $this->uid($request), $request->all()), [], 201));
     }
 
+    // ---- Floors ----
+    public function floors(Request $request): void
+    {
+        $this->guard(fn() => Response::success($this->service->listFloors((int)$request->tenantId(), (int)$request->param('id'))));
+    }
+
+    public function setFloors(Request $request): void
+    {
+        $data = $this->validate($request, ['floors' => 'required|array']);
+        if ($data === null) return;
+        $this->guard(fn() => Response::success($this->service->setFloors((int)$request->tenantId(), (int)$request->param('id'), $request->input('floors', []))));
+    }
+
+    // ---- BOQ ----
+    public function boq(Request $request): void
+    {
+        $this->guard(fn() => Response::success($this->service->listBoq((int)$request->tenantId(), (int)$request->param('id'))));
+    }
+
+    public function saveBoq(Request $request): void
+    {
+        $data = $this->validate($request, ['items' => 'required|array']);
+        if ($data === null) return;
+        $this->guard(fn() => Response::success($this->service->saveBoq((int)$request->tenantId(), (int)$request->param('id'), $request->input('items', []))));
+    }
+
     // ---- Daily site checklists ----
     public function checklists(Request $request): void
     {

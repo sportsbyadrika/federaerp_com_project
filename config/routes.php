@@ -28,8 +28,11 @@ $router->group('/api', [], function (Router $r) use ($auth, $write) {
 
     // ---- Auth (implemented fully in Batch 3) ------------------------------
     // Public auth endpoints
+    $r->get('/config', 'AuthController@config');
     $r->post('/auth/login', 'AuthController@login', [CsrfMiddleware::class]);
     $r->post('/auth/register-organisation', 'AuthController@registerOrganisation', [CsrfMiddleware::class]);
+    $r->post('/auth/forgot-password', 'AuthController@forgotPassword', [CsrfMiddleware::class]);
+    $r->post('/auth/reset-password', 'AuthController@resetPassword', [CsrfMiddleware::class]);
     $r->get('/auth/csrf', 'AuthController@csrf');
 
     // Authenticated auth endpoints

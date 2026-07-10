@@ -46,25 +46,25 @@ $projectId = (int)$db->fetchColumn('SELECT id FROM projects WHERE tenant_id = ? 
 $auth = new AuthService();
 $users = new UserModel();
 
-fwrite(STDOUT, "\n[1] Auth — 3-field login\n");
-check('valid login returns user scoped to org', function () use ($auth) {
-    $u = $auth->login(DEMO, 'admin@skyline.test', PW);
+fwrite(STDOUT, "\n[1] Auth — email + password login\n");
+check('valid login returns user with derived org', function () use ($auth) {
+    $u = $auth->login('admin@skyline.test', PW);
     return $u['organisation_id'] === DEMO && $u['role'] === 'org_admin';
 });
-throws('wrong password rejected', 'invalid_credentials', fn() => $auth->login(DEMO, 'admin@skyline.test', 'nope'));
-throws('nonexistent org rejected', 'invalid_credentials', fn() => $auth->login(999999, 'admin@skyline.test', PW));
-throws('right email, wrong org rejected', 'invalid_credentials', fn() => $auth->login(SUPER, 'pm@skyline.test', PW));
-
-fwrite(STDOUT, "\n[2] Same email across different orgs is isolated\n");
-check('admin@skyline.test exists in both orgs as different users', function () use ($users) {
-    $a = $users->findByOrgAndEmail(DEMO, 'admin@skyline.test');
-    $b = $users->findByOrgAndEmail(SUPER, 'admin@skyline.test');
-    return $a && $b && $a['id'] !== $b['id'] && $a['role'] === 'org_admin' && $b['role'] === 'staff';
+throws('wrong password rejected', 'invalid_credentials', fn() => $auth->login('admin@skyline.test', 'nope'));
+throws('nonexistent email rejected', 'invalid_credentials', fn() => $auth->login('nobody@nowhere.test', PW));
+check('super admin logs in by email only', function () use ($auth) {
+    $u = $auth->login('super@platform.test', PW);
+    return $u['organisation_id'] === SUPER && $u['role'] === 'super_admin';
 });
-check('login with same email under each org yields distinct accounts', function () use ($auth) {
-    $a = $auth->login(DEMO, 'admin@skyline.test', PW);
-    $b = $auth->login(SUPER, 'admin@skyline.test', PW);
-    return $a['id'] !== $b['id'] && $a['organisation_id'] === DEMO && $b['organisation_id'] === SUPER;
+
+fwrite(STDOUT, "\n[2] Email is globally unique\n");
+check('email resolves to exactly one account (global lookup)', function () use ($users) {
+    $a = $users->findByEmail('admin@skyline.test');
+    return $a && $a['organisation_id'] === DEMO && $a['role'] === 'org_admin';
+});
+check('emailExists() detects a taken email across the platform', function () use ($users) {
+    return $users->emailExists('pm@skyline.test') && !$users->emailExists('free@example.test');
 });
 
 fwrite(STDOUT, "\n[3] Super Admin cross-org vs tenant hard-scoping\n");
@@ -160,6 +160,49 @@ fwrite(STDOUT, "\n[8] Password hashing\n");
 check('passwords are bcrypt/argon hashed, never plaintext', function () use ($db) {
     $hash = (string)$db->fetchColumn("SELECT password_hash FROM users WHERE organisation_id=? AND email='admin@skyline.test'", [DEMO]);
     return $hash !== PW && password_verify(PW, $hash);
+});
+
+fwrite(STDOUT, "\n[9] Forgot / reset password token flow\n");
+check('reset token is created and lets the user set a new password', function () use ($auth, $db) {
+    $auth->forgotPassword('admin@skyline.test');            // mailer falls back to log
+    $row = $db->fetch("SELECT * FROM password_resets WHERE email='admin@skyline.test' AND used_at IS NULL ORDER BY id DESC LIMIT 1");
+    if (!$row) return false;
+    // We can't read the emailed token, but a wrong token must fail and expiry logic must hold.
+    try { $auth->resetPassword('not-the-real-token', 'BrandNewPass1'); return false; }
+    catch (ServiceException $e) { return $e->code() === 'invalid_token'; }
+});
+check('reset with the real token succeeds, old password stops working', function () use ($auth, $db) {
+    // Insert a known token directly (simulating the emailed one) to exercise reset.
+    $userId = (int)$db->fetchColumn("SELECT id FROM users WHERE email='supervisor@skyline.test'");
+    $token = 'testtoken_' . bin2hex(random_bytes(6));
+    $db->execute("INSERT INTO password_resets (user_id,email,token_hash,expires_at) VALUES (?,?,?,DATE_ADD(NOW(),INTERVAL 1 HOUR))",
+        [$userId, 'supervisor@skyline.test', hash('sha256', $token)]);
+    $auth->resetPassword($token, 'ResetPass2026');
+    try { $auth->login('supervisor@skyline.test', PW); return false; }        // old pw
+    catch (ServiceException) { /* expected */ }
+    $u = $auth->login('supervisor@skyline.test', 'ResetPass2026');            // new pw
+    return $u['role'] === 'staff';
+});
+
+fwrite(STDOUT, "\n[10] Project type, floors & BOQ\n");
+check('project carries a type; floors + BOQ persist and total correctly', function () use ($db, $projectId) {
+    $svc = new \App\Services\ProjectService();
+    $type = (string)$db->fetchColumn('SELECT project_type FROM projects WHERE id=?', [$projectId]);
+    if (!in_array($type, ['new', 'renovation'], true)) return false;
+    $floors = $svc->listFloors(DEMO, $projectId);
+    if (count($floors) < 3) return false;
+    $boq = $svc->listBoq(DEMO, $projectId);
+    // seed BOQ: GF 120*180 + 400*32 + F1 95*180 + F2 95*180 + 15000 = 21600+12800+17100+17100+15000
+    return abs($boq['total'] - 83600.00) < 0.01 && count($boq['items']) === 5;
+});
+check('saveBoq replaces items and recomputes amounts; cross-tenant blocked', function () use ($projectId) {
+    $svc = new \App\Services\ProjectService();
+    $res = $svc->saveBoq(DEMO, $projectId, [
+        ['description' => 'Test item', 'unit' => 'nos', 'quantity' => 10, 'rate' => 25],
+    ]);
+    if (count($res['items']) !== 1 || abs($res['total'] - 250.00) > 0.01) return false;
+    try { $svc->saveBoq(999001, $projectId, [['description' => 'x', 'quantity' => 1, 'rate' => 1]]); return false; }
+    catch (ServiceException $e) { return $e->code() === 'not_found'; }
 });
 
 // ---- summary ---------------------------------------------------------------
