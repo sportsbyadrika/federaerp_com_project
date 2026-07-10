@@ -221,6 +221,21 @@ check('institution settings: GST/PAN/letterhead update + party GST/PAN persist',
     $noTax = (int)$db->fetchColumn("SELECT COUNT(*) FROM information_schema.columns WHERE table_schema=DATABASE() AND table_name='suppliers' AND column_name='tax_number'");
     return $client && $client['pan'] === 'HARBR5678K' && $sub && $sub['gst_number'] === '29STEEL9012L1Z8' && $noTax === 0;
 });
+check('construction stages: grand total + difference vs contract value', function () use ($projectId) {
+    $svc = new \App\Services\ProjectService();
+    $s = $svc->listStages(DEMO, $projectId);
+    // seed: 125000 + 200000 + 175000 = 500000; contract 500000 -> difference 0
+    if (abs($s['grand_total'] - 500000.00) > 0.01 || abs($s['difference'] - 0.00) > 0.01) return false;
+    $r = $svc->saveStages(DEMO, $projectId, [
+        ['phase_no' => 1, 'details' => 'Phase A', 'percentage' => 60, 'amount' => 300000],
+        ['phase_no' => 2, 'details' => 'Phase B', 'percentage' => 30, 'amount' => 150000],
+    ]);
+    return abs($r['grand_total'] - 450000.00) < 0.01 && abs($r['difference'] - 50000.00) < 0.01 && count($r['stages']) === 2;
+});
+check('project carries a currency (per-project)', function () use ($db, $projectId) {
+    $sym = (string)$db->fetchColumn('SELECT currency_symbol FROM projects WHERE id=?', [$projectId]);
+    return $sym === '₹';
+});
 check('currency: default is set and mirrored to the organisation', function () use ($db) {
     $svc = new \App\Services\CurrencyService();
     $def = $svc->default(DEMO);

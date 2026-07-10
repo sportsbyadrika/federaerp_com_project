@@ -146,7 +146,8 @@ try {
         'tenant_id' => DEMO_ORG, 'client_id' => $clientId, 'estimate_id' => $estId,
         'code' => 'PRJ-0001', 'name' => 'Harbor Villa Construction', 'project_type' => 'new',
         'site_address' => '12 Dockside Ave, Metro City',
-        'contract_value' => 500000, 'start_date' => '2026-01-15', 'end_date' => '2026-12-20',
+        'contract_value' => 500000, 'currency_code' => 'INR', 'currency_symbol' => '₹',
+        'start_date' => '2026-01-15', 'end_date' => '2026-12-20',
         'status' => 'active', 'progress_percent' => 35, 'project_manager_id' => $pmId,
     ]);
 
@@ -179,6 +180,20 @@ try {
                 'quantity' => $qty, 'rate' => $rate, 'amount' => round($qty * $rate, 2), 'sort_order' => $lord++,
             ]);
         }
+    }
+
+    // Construction stages (phased plan vs contract value).
+    $stages = [
+        [1, 'Foundation & substructure', 25, 125000],
+        [2, 'Superstructure & framing', 40, 200000],
+        [3, 'Finishing & handover', 35, 175000],
+    ];
+    $sord = 0;
+    foreach ($stages as [$phase, $details, $pct, $amt]) {
+        $db->insert('construction_stages', [
+            'tenant_id' => DEMO_ORG, 'project_id' => $projectId, 'phase_no' => $phase,
+            'details' => $details, 'percentage' => $pct, 'amount' => $amt, 'sort_order' => $sord++,
+        ]);
     }
 
     // Settings masters: unit types, currencies, BOQ item master.
