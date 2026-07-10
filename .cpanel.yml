@@ -29,7 +29,7 @@
 #   migrations auto-apply (and skip safely until real DB creds are set).
 deployment:
   tasks:
-    - export DEPLOYPATH=/home/olympicd/federaerp.com
+    - export DEPLOYPATH=/home/shooting/public_html/federa.habitract.com
     - export PHP_BIN=/usr/local/bin/php
     - /bin/mkdir -p $DEPLOYPATH/config $DEPLOYPATH/storage/uploads $DEPLOYPATH/storage/logs
 
