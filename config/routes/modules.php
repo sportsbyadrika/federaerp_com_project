@@ -149,7 +149,7 @@ return function (Router $router, array $auth, array $write): void {
         $r->delete('/currencies/{id}', 'CurrencyController@destroy', $write);
 
         // ---- Master data (generic tenant-scoped CRUD) ---------------------
-        $resources = ['clients','suppliers','construction-models','base-rates','materials','subcontractors','vehicles','employees','unit-types','boq-items','expenditure-types'];
+        $resources = ['clients','suppliers','construction-models','base-rates','materials','subcontractors','vehicles','employees','unit-types','boq-items','expenditure-types','staff'];
         foreach ($resources as $res) {
             $r->get("/{$res}", 'MasterDataController@index', $auth);
             $r->get("/{$res}/{id}", 'MasterDataController@show', $auth);

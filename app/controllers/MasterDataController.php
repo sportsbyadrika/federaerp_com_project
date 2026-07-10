@@ -74,6 +74,11 @@ final class MasterDataController extends Controller
             'fillable' => ['tenant_id','user_id','employee_code','name','designation','employment_type','phone','daily_wage','monthly_salary','join_date','status'],
             'required' => ['employee_code' => 'required|string|max:40', 'name' => 'required|string|max:160'],
         ],
+        'staff' => [
+            'table' => 'staff_members', 'soft' => true,
+            'fillable' => ['tenant_id','staff_code','name','phone','email','staff_type','address','pan','status'],
+            'required' => ['staff_code' => 'required|string|max:40', 'name' => 'required|string|max:160', 'staff_type' => 'required|in:office,skilled,unskilled'],
+        ],
     ];
 
     public function index(Request $request): void
