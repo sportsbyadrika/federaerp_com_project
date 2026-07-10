@@ -20,6 +20,7 @@ final class ProjectService extends BaseService
     private GenericModel $floors;
     private GenericModel $boqEntries;
     private GenericModel $boqLines;
+    private GenericModel $stages;
 
     public function __construct()
     {
@@ -35,8 +36,9 @@ final class ProjectService extends BaseService
         ]);
         $this->projects = new GenericModel('projects', [
             'tenant_id', 'client_id', 'estimate_id', 'code', 'name', 'project_type', 'description', 'site_address',
-            'contract_value', 'start_date', 'end_date', 'status', 'progress_percent', 'project_manager_id',
+            'contract_value', 'currency_code', 'currency_symbol', 'start_date', 'end_date', 'status', 'progress_percent', 'project_manager_id',
         ], softDelete: true);
+        $this->stages = new GenericModel('construction_stages', ['tenant_id', 'project_id', 'phase_no', 'details', 'percentage', 'amount', 'sort_order']);
         $this->floors = new GenericModel('project_floors', ['tenant_id', 'project_id', 'code', 'label', 'sort_order']);
         $this->boqEntries = new GenericModel('boq_entries', ['tenant_id', 'project_id', 'boq_item_master_id', 'item_code', 'item_head', 'description', 'unit', 'sort_order']);
         $this->boqLines = new GenericModel('boq_lines', ['tenant_id', 'boq_entry_id', 'project_floor_id', 'quantity', 'rate', 'amount', 'sort_order']);
@@ -62,12 +64,16 @@ final class ProjectService extends BaseService
 
     public function createProject(int $tenantId, array $input): array
     {
+        // Default the project currency to the organisation's default.
+        $org = Database::instance()->fetch('SELECT currency, currency_symbol FROM organisations WHERE id = :t', [':t' => $tenantId]);
         $id = $this->projects->create([
             'tenant_id'          => $tenantId,
             'client_id'          => $input['client_id'] ?? null,
             'estimate_id'        => $input['estimate_id'] ?? null,
             'code'               => $input['code'] ?? $this->nextCode($tenantId),
             'name'               => (string)$input['name'],
+            'currency_code'      => $input['currency_code'] ?? ($org['currency'] ?? 'USD'),
+            'currency_symbol'    => $input['currency_symbol'] ?? ($org['currency_symbol'] ?? '$'),
             'project_type'       => in_array(($input['project_type'] ?? 'new'), ['new', 'renovation'], true) ? $input['project_type'] : 'new',
             'description'        => $input['description'] ?? null,
             'site_address'       => $input['site_address'] ?? null,
@@ -306,6 +312,50 @@ final class ProjectService extends BaseService
                 'quantity' => $qty, 'rate' => $rate, 'amount' => round($qty * $rate, 2), 'sort_order' => $ord++,
             ]);
         }
+    }
+
+    // ---- Construction stages ----------------------------------------------
+    public function listStages(int $tenantId, int $projectId): array
+    {
+        $project = $this->projects->findOrFail($projectId, $tenantId);
+        $rows = $this->stages->forTenant($tenantId, ['project_id' => $projectId], ['order_by' => 'sort_order', 'order_dir' => 'ASC']);
+        $grand = 0.0;
+        foreach ($rows as $r) { $grand += (float)$r['amount']; }
+        $contract = (float)$project['contract_value'];
+        return [
+            'stages'         => $rows,
+            'grand_total'    => round($grand, 2),
+            'contract_value' => round($contract, 2),
+            'difference'     => round($contract - $grand, 2),
+        ];
+    }
+
+    /** Replace the project's construction stages with the provided list. */
+    public function saveStages(int $tenantId, int $projectId, array $stages): array
+    {
+        $this->projects->findOrFail($projectId, $tenantId);
+        $db = Database::instance();
+        $db->beginTransaction();
+        try {
+            $db->execute('DELETE FROM construction_stages WHERE tenant_id = ? AND project_id = ?', [$tenantId, $projectId]);
+            $order = 0;
+            foreach ($stages as $s) {
+                $details = trim((string)($s['details'] ?? ''));
+                $amount = (float)($s['amount'] ?? 0);
+                if ($details === '' && $amount == 0.0) { continue; }
+                $this->stages->create([
+                    'tenant_id' => $tenantId, 'project_id' => $projectId,
+                    'phase_no' => (int)($s['phase_no'] ?? ($order + 1)),
+                    'details' => $details, 'percentage' => (float)($s['percentage'] ?? 0),
+                    'amount' => round($amount, 2), 'sort_order' => $order++,
+                ]);
+            }
+            $db->commit();
+        } catch (\Throwable $e) {
+            $db->rollBack();
+            throw $e;
+        }
+        return $this->listStages($tenantId, $projectId);
     }
 
     // ---- Work progress logs ----------------------------------------------

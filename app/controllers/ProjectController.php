@@ -132,6 +132,19 @@ final class ProjectController extends Controller
         });
     }
 
+    // ---- Construction stages ----
+    public function stages(Request $request): void
+    {
+        $this->guard(fn() => Response::success($this->service->listStages((int)$request->tenantId(), (int)$request->param('id'))));
+    }
+
+    public function saveStages(Request $request): void
+    {
+        $data = $this->validate($request, ['stages' => 'required|array']);
+        if ($data === null) return;
+        $this->guard(fn() => Response::success($this->service->saveStages((int)$request->tenantId(), (int)$request->param('id'), $request->input('stages', []))));
+    }
+
     // ---- Daily site checklists ----
     public function checklists(Request $request): void
     {

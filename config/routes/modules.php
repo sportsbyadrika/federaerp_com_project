@@ -54,6 +54,8 @@ return function (Router $router, array $auth, array $write): void {
         $r->post('/projects/{id}/boq', 'ProjectController@createBoqEntry', $write);
         $r->put('/boq-entries/{id}', 'ProjectController@updateBoqEntry', $write);
         $r->delete('/boq-entries/{id}', 'ProjectController@deleteBoqEntry', $write);
+        $r->get('/projects/{id}/stages', 'ProjectController@stages', $auth);
+        $r->post('/projects/{id}/stages', 'ProjectController@saveStages', $write);
 
         // ---- Kanban tasks -------------------------------------------------
         $r->get('/projects/{id}/board', 'TaskController@board', $auth);
