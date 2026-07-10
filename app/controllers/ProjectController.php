@@ -132,17 +132,32 @@ final class ProjectController extends Controller
         });
     }
 
-    // ---- Construction stages ----
+    // ---- Construction stages (modal CRUD) ----
     public function stages(Request $request): void
     {
         $this->guard(fn() => Response::success($this->service->listStages((int)$request->tenantId(), (int)$request->param('id'))));
     }
 
-    public function saveStages(Request $request): void
+    public function createStage(Request $request): void
     {
-        $data = $this->validate($request, ['stages' => 'required|array']);
+        $data = $this->validate($request, ['details' => 'required|string|max:255']);
         if ($data === null) return;
-        $this->guard(fn() => Response::success($this->service->saveStages((int)$request->tenantId(), (int)$request->param('id'), $request->input('stages', []))));
+        $this->guard(fn() => Response::success($this->service->createStage((int)$request->tenantId(), (int)$request->param('id'), $request->all()), [], 201));
+    }
+
+    public function updateStage(Request $request): void
+    {
+        $this->guard(fn() => Response::success($this->service->updateStage((int)$request->tenantId(), (int)$request->param('id'), $request->all())));
+    }
+
+    public function deleteStage(Request $request): void
+    {
+        $this->guard(fn() => Response::success($this->service->deleteStage((int)$request->tenantId(), (int)$request->param('id'))));
+    }
+
+    public function tasksList(Request $request): void
+    {
+        $this->guard(fn() => Response::success($this->service->projectTasks((int)$request->tenantId(), (int)$request->param('id'))));
     }
 
     // ---- Daily site checklists ----

@@ -216,6 +216,11 @@ try {
             'item_head' => $head, 'description' => $desc, 'unit' => $unit, 'default_rate' => $rate,
         ]);
     }
+    $expTypeIds = [];
+    $exord = 0;
+    foreach (['Materials', 'Labour', 'Equipment Hire', 'Fuel', 'Office & Admin'] as $etn) {
+        $expTypeIds[$etn] = $db->insert('expenditure_types', ['tenant_id' => DEMO_ORG, 'name' => $etn, 'sort_order' => $exord++]);
+    }
 
     $columns = [
         ['To Do', '#94a3b8', 0, 0],
@@ -437,6 +442,34 @@ try {
         'designation' => 'Site Supervisor', 'employment_type' => 'permanent', 'monthly_salary' => 3200, 'join_date' => '2025-03-01',
     ]);
     $db->insert('attendance_logs', ['tenant_id' => DEMO_ORG, 'employee_id' => $empId, 'project_id' => $projectId, 'attendance_date' => '2026-06-01', 'status' => 'present', 'hours_worked' => 8]);
+
+    // ---- Expenditure + Income samples -------------------------------------
+    $db->insert('expenditures', [
+        'tenant_id' => DEMO_ORG, 'scope' => 'project', 'project_id' => $projectId,
+        'expenditure_type_id' => $expTypeIds['Materials'], 'party_type' => 'supplier', 'party_id' => $supId,
+        'amount' => 42000, 'mode' => 'fund_transfer', 'reference' => 'PO-cement-batch1',
+        'expense_date' => '2026-03-05', 'notes' => 'Cement + steel purchase', 'created_by' => $adminId,
+    ]);
+    $db->insert('expenditures', [
+        'tenant_id' => DEMO_ORG, 'scope' => 'project', 'project_id' => $projectId,
+        'expenditure_type_id' => $expTypeIds['Labour'], 'party_type' => 'subcontractor', 'party_id' => $scId,
+        'amount' => 18000, 'mode' => 'cheque', 'reference' => 'CHQ-00231',
+        'expense_date' => '2026-03-20', 'notes' => 'Steel erection labour', 'created_by' => $adminId,
+    ]);
+    $db->insert('expenditures', [
+        'tenant_id' => DEMO_ORG, 'scope' => 'institutional', 'project_id' => null,
+        'expenditure_type_id' => $expTypeIds['Office & Admin'], 'party_type' => 'none', 'party_id' => null,
+        'amount' => 6500, 'mode' => 'cash', 'reference' => 'office-rent-mar',
+        'expense_date' => '2026-03-01', 'notes' => 'Office rent', 'created_by' => $adminId,
+    ]);
+
+    $incAmt = 100000.00; $incGstPct = 18.0; $incGst = round($incAmt * $incGstPct / 100, 2);
+    $db->insert('incomes', [
+        'tenant_id' => DEMO_ORG, 'project_id' => $projectId, 'client_id' => $clientId,
+        'receipt_no' => 'RCPT-2026-0001', 'amount' => $incAmt, 'gst_percent' => $incGstPct,
+        'gst_amount' => $incGst, 'total_amount' => round($incAmt + $incGst, 2), 'mode' => 'fund_transfer',
+        'reference' => 'NEFT-77120', 'income_date' => '2026-04-10', 'notes' => 'Milestone 1 payment', 'created_by' => $adminId,
+    ]);
 
     $pdo->commit();
     echo "Seed complete.\n\n";
