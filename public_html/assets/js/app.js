@@ -10,47 +10,64 @@
     const store = window.store;
     const CSApp = window.CSApp;
 
-    // ---- Login + onboarding (unauthenticated) -----------------------------
-    const AuthView = {
-        setup() {
-            const mode = ref('login'); // 'login' | 'onboard'
-            const busy = ref(false);
-            const error = ref(null);
-            const login = reactive({ organisation_id: '', email: '', password: '' });
-            const onb = reactive({ organisation_name: '', admin_name: '', admin_email: '', password: '', password_confirmation: '' });
-            const created = ref(null);
-
-            async function ensureCsrf() {
-                try { const r = await api.get('/api/auth/csrf'); api.setCsrf(r.data.csrf_token); } catch (e) {}
+    // ---- reCAPTCHA widget (renders only when configured) ------------------
+    const captchaHelper = {
+        loading: false, ready: false,
+        ensureScript() {
+            if (this.ready || this.loading) return;
+            this.loading = true;
+            const s = document.createElement('script');
+            s.src = 'https://www.google.com/recaptcha/api.js?render=explicit';
+            s.async = true; s.defer = true;
+            s.onload = () => { this.ready = true; };
+            document.head.appendChild(s);
+        },
+    };
+    const RecaptchaBox = {
+        props: { modelValue: String },
+        emits: ['update:modelValue'],
+        setup(props, { emit }) {
+            const el = ref(null);
+            let widgetId = null;
+            const enabled = computed(() => store.config.captcha_enabled && store.config.recaptcha_site_key);
+            function tryRender(attempt = 0) {
+                if (!enabled.value || !el.value) return;
+                if (window.grecaptcha && window.grecaptcha.render) {
+                    try {
+                        widgetId = window.grecaptcha.render(el.value, {
+                            sitekey: store.config.recaptcha_site_key,
+                            callback: (t) => emit('update:modelValue', t),
+                            'expired-callback': () => emit('update:modelValue', ''),
+                        });
+                    } catch (e) { /* already rendered */ }
+                } else if (attempt < 40) {
+                    setTimeout(() => tryRender(attempt + 1), 150);
+                }
             }
-            onMounted(ensureCsrf);
+            onMounted(() => { if (enabled.value) { captchaHelper.ensureScript(); tryRender(); } });
+            return { el, enabled };
+        },
+        template: `<div v-if="enabled" ref="el" class="my-3"></div>`,
+    };
 
+    // ---- Login (Email + Password) -----------------------------------------
+    const AuthView = {
+        components: { RecaptchaBox },
+        setup() {
+            const busy = ref(false), error = ref(null);
+            const login = reactive({ email: '', password: '' });
+            const captcha = ref('');
             async function submitLogin() {
                 error.value = null; busy.value = true;
                 try {
-                    const r = await api.post('/api/auth/login', {
-                        organisation_id: login.organisation_id, email: login.email, password: login.password,
-                    });
+                    const r = await api.post('/api/auth/login', { email: login.email, password: login.password, recaptcha_token: captcha.value });
                     api.setCsrf(r.data.csrf_token);
                     store.user = r.data.user;
                     CSApp.navigate('/');
                 } catch (e) { error.value = e.message || 'Login failed'; }
                 finally { busy.value = false; }
             }
-
-            async function submitOnboard() {
-                error.value = null; busy.value = true;
-                try {
-                    const r = await api.post('/api/auth/register-organisation', { ...onb });
-                    created.value = r.data.organisation_id;
-                    mode.value = 'login';
-                    login.organisation_id = String(r.data.organisation_id);
-                    login.email = onb.admin_email;
-                } catch (e) { error.value = e.message || 'Could not create organisation'; }
-                finally { busy.value = false; }
-            }
-
-            return { mode, busy, error, login, onb, created, submitLogin, submitOnboard };
+            return { busy, error, login, captcha, submitLogin };
         },
         template: `
         <div class="min-h-screen flex items-center justify-center px-4 py-10">
@@ -60,64 +77,154 @@
                     <h1 class="mt-3 text-xl font-semibold text-slate-800">{{ store.appName }}</h1>
                     <p class="text-sm text-slate-500">Construction Management Platform</p>
                 </div>
-
                 <div class="bg-white rounded-2xl border border-slate-200 shadow-sm p-6">
-                    <div class="flex gap-2 mb-5 p-1 bg-slate-100 rounded-lg text-sm">
-                        <button @click="mode='login'" :class="mode==='login' ? 'bg-white shadow text-slate-900' : 'text-slate-500'" class="flex-1 py-1.5 rounded-md font-medium">Sign in</button>
-                        <button @click="mode='onboard'" :class="mode==='onboard' ? 'bg-white shadow text-slate-900' : 'text-slate-500'" class="flex-1 py-1.5 rounded-md font-medium">New organisation</button>
-                    </div>
-
-                    <div v-if="created" class="mb-4 rounded-lg bg-emerald-50 border border-emerald-200 px-3 py-2 text-sm text-emerald-700">
-                        Organisation created! Your Organisation ID is <b>{{ created }}</b>. Use it to sign in.
-                    </div>
+                    <h2 class="font-semibold text-slate-800 mb-4">Sign in</h2>
                     <p v-if="error" class="mb-4 rounded-lg bg-rose-50 border border-rose-200 px-3 py-2 text-sm text-rose-700">{{ error }}</p>
-
-                    <!-- LOGIN: three fields -->
-                    <form v-if="mode==='login'" @submit.prevent="submitLogin" class="space-y-3">
-                        <div>
-                            <label class="block text-sm text-slate-600 mb-1">Organisation ID</label>
-                            <input v-model="login.organisation_id" inputmode="numeric" maxlength="6" required placeholder="6-digit ID"
-                                   class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:ring-2 focus:ring-brand/40 focus:border-brand outline-none">
-                        </div>
+                    <form @submit.prevent="submitLogin" class="space-y-3">
                         <div>
                             <label class="block text-sm text-slate-600 mb-1">Email</label>
-                            <input v-model="login.email" type="email" required class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:ring-2 focus:ring-brand/40 focus:border-brand outline-none">
+                            <input v-model="login.email" type="email" required autocomplete="username" class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:ring-2 focus:ring-brand/40 focus:border-brand outline-none">
                         </div>
                         <div>
                             <label class="block text-sm text-slate-600 mb-1">Password</label>
-                            <input v-model="login.password" type="password" required class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:ring-2 focus:ring-brand/40 focus:border-brand outline-none">
+                            <input v-model="login.password" type="password" required autocomplete="current-password" class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:ring-2 focus:ring-brand/40 focus:border-brand outline-none">
                         </div>
+                        <recaptcha-box v-model="captcha"></recaptcha-box>
                         <button type="submit" :disabled="busy" class="w-full py-2.5 rounded-lg bg-brand text-white font-medium hover:bg-brand-dark disabled:opacity-60">{{ busy ? 'Signing in…' : 'Sign in' }}</button>
                     </form>
-
-                    <!-- ONBOARD -->
-                    <form v-else @submit.prevent="submitOnboard" class="space-y-3">
-                        <div>
-                            <label class="block text-sm text-slate-600 mb-1">Company / Organisation name</label>
-                            <input v-model="onb.organisation_name" required class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-brand/40 focus:border-brand">
-                        </div>
-                        <div>
-                            <label class="block text-sm text-slate-600 mb-1">Admin name</label>
-                            <input v-model="onb.admin_name" required class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-brand/40 focus:border-brand">
-                        </div>
-                        <div>
-                            <label class="block text-sm text-slate-600 mb-1">Admin email</label>
-                            <input v-model="onb.admin_email" type="email" required class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-brand/40 focus:border-brand">
-                        </div>
-                        <div class="grid grid-cols-2 gap-3">
-                            <div>
-                                <label class="block text-sm text-slate-600 mb-1">Password</label>
-                                <input v-model="onb.password" type="password" minlength="8" required class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-brand/40 focus:border-brand">
-                            </div>
-                            <div>
-                                <label class="block text-sm text-slate-600 mb-1">Confirm</label>
-                                <input v-model="onb.password_confirmation" type="password" minlength="8" required class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-brand/40 focus:border-brand">
-                            </div>
-                        </div>
-                        <button type="submit" :disabled="busy" class="w-full py-2.5 rounded-lg bg-brand text-white font-medium hover:bg-brand-dark disabled:opacity-60">{{ busy ? 'Creating…' : 'Create organisation' }}</button>
-                    </form>
+                    <div class="flex items-center justify-between mt-4 text-sm">
+                        <a href="#/forgot" class="text-brand hover:underline">Forgot password?</a>
+                        <a href="#/register" class="text-brand hover:underline">Register new institution</a>
+                    </div>
                 </div>
-                <p class="text-center text-xs text-slate-400 mt-4">Super Admin signs in with Organisation ID 111111.</p>
+            </div>
+        </div>`,
+    };
+
+    // ---- Register a new institution (separate page) -----------------------
+    const RegisterView = {
+        components: { RecaptchaBox },
+        setup() {
+            const busy = ref(false), error = ref(null), created = ref(null);
+            const onb = reactive({ organisation_name: '', admin_name: '', admin_email: '', password: '', password_confirmation: '' });
+            const captcha = ref('');
+            async function submit() {
+                error.value = null; busy.value = true;
+                try {
+                    const r = await api.post('/api/auth/register-organisation', { ...onb, recaptcha_token: captcha.value });
+                    created.value = r.data.organisation_id;
+                } catch (e) { error.value = e.message || 'Could not create institution'; }
+                finally { busy.value = false; }
+            }
+            return { busy, error, created, onb, captcha, submit };
+        },
+        template: `
+        <div class="min-h-screen flex items-center justify-center px-4 py-10">
+            <div class="w-full max-w-md">
+                <div class="text-center mb-6">
+                    <div class="inline-flex h-12 w-12 items-center justify-center rounded-xl bg-brand text-white text-lg font-semibold">CS</div>
+                    <h1 class="mt-3 text-xl font-semibold text-slate-800">Register your institution</h1>
+                    <p class="text-sm text-slate-500">Create an account for your construction company</p>
+                </div>
+                <div class="bg-white rounded-2xl border border-slate-200 shadow-sm p-6">
+                    <div v-if="created" class="rounded-lg bg-emerald-50 border border-emerald-200 px-4 py-3 text-sm text-emerald-700">
+                        Institution created! You can now <a href="#/" class="font-medium underline">sign in</a> with your admin email and password.
+                    </div>
+                    <template v-else>
+                        <p v-if="error" class="mb-4 rounded-lg bg-rose-50 border border-rose-200 px-3 py-2 text-sm text-rose-700">{{ error }}</p>
+                        <form @submit.prevent="submit" class="space-y-3">
+                            <div><label class="block text-sm text-slate-600 mb-1">Institution / Company name</label><input v-model="onb.organisation_name" required class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-brand/40 focus:border-brand"></div>
+                            <div><label class="block text-sm text-slate-600 mb-1">Admin name</label><input v-model="onb.admin_name" required class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-brand/40 focus:border-brand"></div>
+                            <div><label class="block text-sm text-slate-600 mb-1">Admin email</label><input v-model="onb.admin_email" type="email" required class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-brand/40 focus:border-brand"></div>
+                            <div class="grid grid-cols-2 gap-3">
+                                <div><label class="block text-sm text-slate-600 mb-1">Password</label><input v-model="onb.password" type="password" minlength="8" required class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-brand/40 focus:border-brand"></div>
+                                <div><label class="block text-sm text-slate-600 mb-1">Confirm</label><input v-model="onb.password_confirmation" type="password" minlength="8" required class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-brand/40 focus:border-brand"></div>
+                            </div>
+                            <recaptcha-box v-model="captcha"></recaptcha-box>
+                            <button type="submit" :disabled="busy" class="w-full py-2.5 rounded-lg bg-brand text-white font-medium hover:bg-brand-dark disabled:opacity-60">{{ busy ? 'Creating…' : 'Create institution' }}</button>
+                        </form>
+                    </template>
+                    <p class="text-center text-sm mt-4"><a href="#/" class="text-brand hover:underline">← Back to sign in</a></p>
+                </div>
+            </div>
+        </div>`,
+    };
+
+    // ---- Forgot password --------------------------------------------------
+    const ForgotView = {
+        components: { RecaptchaBox },
+        setup() {
+            const busy = ref(false), sent = ref(false), error = ref(null);
+            const email = ref(''); const captcha = ref('');
+            async function submit() {
+                error.value = null; busy.value = true;
+                try { await api.post('/api/auth/forgot-password', { email: email.value, recaptcha_token: captcha.value }); sent.value = true; }
+                catch (e) { error.value = e.message; }
+                finally { busy.value = false; }
+            }
+            return { busy, sent, error, email, captcha, submit };
+        },
+        template: `
+        <div class="min-h-screen flex items-center justify-center px-4 py-10">
+            <div class="w-full max-w-md">
+                <div class="text-center mb-6"><h1 class="text-xl font-semibold text-slate-800">Reset your password</h1></div>
+                <div class="bg-white rounded-2xl border border-slate-200 shadow-sm p-6">
+                    <div v-if="sent" class="rounded-lg bg-emerald-50 border border-emerald-200 px-4 py-3 text-sm text-emerald-700">
+                        If that email is registered, we've sent a reset link. Check your inbox (and spam). The link expires in 1 hour.
+                    </div>
+                    <template v-else>
+                        <p class="text-sm text-slate-500 mb-3">Enter your account email and we'll send you a reset link.</p>
+                        <p v-if="error" class="mb-3 rounded-lg bg-rose-50 border border-rose-200 px-3 py-2 text-sm text-rose-700">{{ error }}</p>
+                        <form @submit.prevent="submit" class="space-y-3">
+                            <div><label class="block text-sm text-slate-600 mb-1">Email</label><input v-model="email" type="email" required class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-brand/40 focus:border-brand"></div>
+                            <recaptcha-box v-model="captcha"></recaptcha-box>
+                            <button type="submit" :disabled="busy" class="w-full py-2.5 rounded-lg bg-brand text-white font-medium hover:bg-brand-dark disabled:opacity-60">{{ busy ? 'Sending…' : 'Send reset link' }}</button>
+                        </form>
+                    </template>
+                    <p class="text-center text-sm mt-4"><a href="#/" class="text-brand hover:underline">← Back to sign in</a></p>
+                </div>
+            </div>
+        </div>`,
+    };
+
+    // ---- Reset password (from emailed link #/reset?token=..) --------------
+    const ResetView = {
+        setup() {
+            const busy = ref(false), done = ref(false), error = ref(null);
+            const pw = reactive({ password: '', password_confirmation: '' });
+            const token = computed(() => store.query.token || '');
+            async function submit() {
+                error.value = null;
+                if (pw.password !== pw.password_confirmation) { error.value = 'Passwords do not match'; return; }
+                busy.value = true;
+                try {
+                    await api.post('/api/auth/reset-password', { token: token.value, password: pw.password, password_confirmation: pw.password_confirmation });
+                    done.value = true;
+                } catch (e) { error.value = e.message; }
+                finally { busy.value = false; }
+            }
+            return { busy, done, error, pw, token, submit };
+        },
+        template: `
+        <div class="min-h-screen flex items-center justify-center px-4 py-10">
+            <div class="w-full max-w-md">
+                <div class="text-center mb-6"><h1 class="text-xl font-semibold text-slate-800">Set a new password</h1></div>
+                <div class="bg-white rounded-2xl border border-slate-200 shadow-sm p-6">
+                    <div v-if="done" class="rounded-lg bg-emerald-50 border border-emerald-200 px-4 py-3 text-sm text-emerald-700">
+                        Password updated. <a href="#/" class="font-medium underline">Sign in</a> with your new password.
+                    </div>
+                    <div v-else-if="!token" class="rounded-lg bg-rose-50 border border-rose-200 px-4 py-3 text-sm text-rose-700">
+                        Missing or invalid reset link. Please request a new one from <a href="#/forgot" class="underline">Forgot password</a>.
+                    </div>
+                    <template v-else>
+                        <p v-if="error" class="mb-3 rounded-lg bg-rose-50 border border-rose-200 px-3 py-2 text-sm text-rose-700">{{ error }}</p>
+                        <form @submit.prevent="submit" class="space-y-3">
+                            <div><label class="block text-sm text-slate-600 mb-1">New password</label><input v-model="pw.password" type="password" minlength="8" required class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-brand/40 focus:border-brand"></div>
+                            <div><label class="block text-sm text-slate-600 mb-1">Confirm new password</label><input v-model="pw.password_confirmation" type="password" minlength="8" required class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-brand/40 focus:border-brand"></div>
+                            <button type="submit" :disabled="busy" class="w-full py-2.5 rounded-lg bg-brand text-white font-medium hover:bg-brand-dark disabled:opacity-60">{{ busy ? 'Saving…' : 'Update password' }}</button>
+                        </form>
+                    </template>
+                </div>
             </div>
         </div>`,
     };
@@ -173,6 +280,29 @@
 
             <!-- Org Admin / Staff -->
             <div v-else class="space-y-6">
+                <!-- Institution details -->
+                <div v-if="data.metrics.organisation" class="bg-white rounded-xl border border-slate-200 p-5">
+                    <div class="flex items-start justify-between flex-wrap gap-3">
+                        <div>
+                            <h2 class="font-semibold text-slate-800">{{ data.metrics.organisation.name }}</h2>
+                            <p v-if="data.metrics.organisation.legal_name" class="text-sm text-slate-500">{{ data.metrics.organisation.legal_name }}</p>
+                            <p class="text-sm text-slate-500 mt-1">
+                                <span v-if="data.metrics.organisation.address">{{ data.metrics.organisation.address }}<span v-if="data.metrics.organisation.city">, </span></span>
+                                <span v-if="data.metrics.organisation.city">{{ data.metrics.organisation.city }}</span>
+                                <span v-if="data.metrics.organisation.country"> · {{ data.metrics.organisation.country }}</span>
+                            </p>
+                            <p class="text-sm text-slate-500">
+                                <span v-if="data.metrics.organisation.email">✉ {{ data.metrics.organisation.email }}</span>
+                                <span v-if="data.metrics.organisation.phone"> · ☎ {{ data.metrics.organisation.phone }}</span>
+                            </p>
+                        </div>
+                        <div class="text-right">
+                            <div class="text-xs text-slate-400">Institution ID</div>
+                            <div class="text-lg font-mono font-semibold text-slate-700">{{ data.metrics.organisation.id }}</div>
+                            <div class="text-xs text-slate-400 mt-1">Currency: {{ data.metrics.organisation.currency }}</div>
+                        </div>
+                    </div>
+                </div>
                 <div class="grid grid-cols-2 lg:grid-cols-4 gap-4">
                     <div class="bg-white rounded-xl border border-slate-200 p-5"><div class="text-3xl font-semibold text-slate-800">{{ data.metrics.projects.active }}</div><div class="text-sm text-slate-500 mt-1">Active projects</div></div>
                     <div class="bg-white rounded-xl border border-slate-200 p-5"><div class="text-3xl font-semibold text-emerald-600">{{ fmt(data.metrics.finance.income) }}</div><div class="text-sm text-slate-500 mt-1">Income</div></div>
@@ -213,6 +343,14 @@
             const authed = computed(() => !!store.user);
             const role = computed(() => store.user && store.user.role);
             const currentView = computed(() => CSApp.resolve() || 'NotFound');
+            // Unauthenticated routing (login / register / forgot / reset).
+            const guestView = computed(() => {
+                const r = store.route;
+                if (r === '/register') return 'RegisterView';
+                if (r === '/forgot') return 'ForgotView';
+                if (r === '/reset') return 'ResetView';
+                return 'AuthView';
+            });
 
             const menu = computed(() => {
                 if (!store.user) return [];
@@ -253,10 +391,10 @@
             }
             onMounted(() => document.addEventListener('click', onDocClick));
 
-            return { store, menuOpen, profileOpen, showChangePw, pw, pwMsg, pwErr, busy, authed, role, menu, currentView, logout, submitChangePassword, profileRef, headerRef };
+            return { store, menuOpen, profileOpen, showChangePw, pw, pwMsg, pwErr, busy, authed, role, menu, currentView, guestView, logout, submitChangePassword, profileRef, headerRef };
         },
         template: `
-        <div v-if="!authed"><auth-view></auth-view></div>
+        <div v-if="!authed"><component :is="guestView"></component></div>
         <div v-else class="min-h-screen flex flex-col">
             <header ref="headerRef" class="fixed top-0 inset-x-0 z-40 bg-white border-b border-slate-200 shadow-sm print:hidden">
                 <div class="w-full px-4 sm:px-6 h-14 flex items-center justify-between">
@@ -316,6 +454,10 @@
     // Expose the shared store to every component template.
     app.config.globalProperties.store = store;
     app.component('AuthView', AuthView);
+    app.component('RegisterView', RegisterView);
+    app.component('ForgotView', ForgotView);
+    app.component('ResetView', ResetView);
+    app.component('RecaptchaBox', RecaptchaBox);
     app.component('NotFound', NotFound);
     CSApp.installPending(app);
     app.mount('#app');

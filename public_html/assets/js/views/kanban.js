@@ -112,6 +112,7 @@
                     </select>
                 </div>
                 <div class="flex gap-2">
+                    <a v-if="activeId" :href="'#/project/' + activeId" class="px-3 py-2 text-sm rounded-lg border border-slate-300 text-slate-600 hover:bg-slate-50">⚙ Details / BOQ</a>
                     <button @click="showNewProject=true" class="px-3 py-2 text-sm rounded-lg border border-slate-300 text-slate-600 hover:bg-slate-50">+ Project</button>
                     <button v-if="board" @click="showNew=true" class="px-3 py-2 text-sm rounded-lg bg-brand text-white hover:bg-brand-dark">+ Task</button>
                 </div>

@@ -9,21 +9,42 @@
 
     const boot = window.__APP__ || {};
 
+    const first = parseHash(location.hash);
     const store = reactive({
         user: boot.user || null,
         appName: boot.appName || 'Construction SaaS',
-        route: normalize(location.hash),
+        route: first.path,
+        query: first.query,     // parsed hash query params (e.g. #/reset?token=..)
         params: {},
         flash: null,            // { type:'success'|'error', message }
+        config: { captcha_enabled: false, recaptcha_site_key: '', app_name: '' },
         // shared lookups cached in-memory (never localStorage for app state)
         projects: [],
         activeProjectId: null,
     });
 
-    function normalize(hash) {
+    function parseHash(hash) {
         const h = (hash || '#/').replace(/^#/, '');
-        return h.startsWith('/') ? h : '/' + h;
+        const qi = h.indexOf('?');
+        const rawPath = qi === -1 ? h : h.slice(0, qi);
+        const qs = qi === -1 ? '' : h.slice(qi + 1);
+        const path = rawPath.startsWith('/') ? rawPath : '/' + rawPath;
+        const query = {};
+        if (qs) new URLSearchParams(qs).forEach((v, k) => { query[k] = v; });
+        return { path: path || '/', query };
     }
+    function normalize(hash) { return parseHash(hash).path; }
+
+    // Load public front-end config (reCAPTCHA site key, app name) once.
+    async function loadConfig() {
+        try {
+            const r = await api.get('/api/config');
+            store.config = r.data;
+            if (r.data.app_name) store.appName = r.data.app_name;
+            if (r.data.csrf_token) api.setCsrf(r.data.csrf_token);
+        } catch (e) { /* keep defaults */ }
+    }
+    loadConfig();
 
     function isAuthed() { return !!store.user; }
     function role() { return store.user ? store.user.role : null; }
@@ -36,7 +57,7 @@
         if (ttl) setTimeout(() => { store.flash = null; }, ttl);
     }
 
-    window.addEventListener('hashchange', () => { store.route = normalize(location.hash); });
+    window.addEventListener('hashchange', () => { const h = parseHash(location.hash); store.route = h.path; store.query = h.query; });
 
     // Route registry: path (string or regex) -> component name.
     const routes = [];
