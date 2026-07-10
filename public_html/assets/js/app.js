@@ -227,6 +227,7 @@
                     { label: 'Billing', href: '#/billing' },
                     { label: 'Documents', href: '#/documents' },
                     { label: 'Reports', href: '#/reports' },
+                    { label: 'Setup', href: '#/setup' },
                 ];
             });
 
@@ -243,12 +244,21 @@
                     setTimeout(() => { showChangePw.value = false; pwMsg.value = null; }, 1200);
                 } catch (e) { pwErr.value = e.message; } finally { busy.value = false; }
             }
-            return { store, menuOpen, profileOpen, showChangePw, pw, pwMsg, pwErr, busy, authed, role, menu, currentView, logout, submitChangePassword };
+            // Auto-close the profile dropdown / mobile menu on any outside click.
+            const profileRef = ref(null);
+            const headerRef = ref(null);
+            function onDocClick(e) {
+                if (profileOpen.value && profileRef.value && !profileRef.value.contains(e.target)) profileOpen.value = false;
+                if (menuOpen.value && headerRef.value && !headerRef.value.contains(e.target)) menuOpen.value = false;
+            }
+            onMounted(() => document.addEventListener('click', onDocClick));
+
+            return { store, menuOpen, profileOpen, showChangePw, pw, pwMsg, pwErr, busy, authed, role, menu, currentView, logout, submitChangePassword, profileRef, headerRef };
         },
         template: `
         <div v-if="!authed"><auth-view></auth-view></div>
         <div v-else class="min-h-screen flex flex-col">
-            <header class="fixed top-0 inset-x-0 z-40 bg-white border-b border-slate-200 shadow-sm print:hidden">
+            <header ref="headerRef" class="fixed top-0 inset-x-0 z-40 bg-white border-b border-slate-200 shadow-sm print:hidden">
                 <div class="w-full px-4 sm:px-6 h-14 flex items-center justify-between">
                     <div class="flex items-center gap-3">
                         <button class="sm:hidden p-2 -ml-2 text-slate-600" @click="menuOpen=!menuOpen"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 6h16M4 12h16M4 18h16"/></svg></button>
@@ -257,7 +267,7 @@
                             <a v-for="m in menu" :key="m.href" :href="m.href" class="px-3 py-1.5 rounded-md text-sm text-slate-600 hover:bg-slate-100 hover:text-slate-900">{{ m.label }}</a>
                         </nav>
                     </div>
-                    <div class="relative">
+                    <div class="relative" ref="profileRef">
                         <button @click="profileOpen=!profileOpen" class="flex items-center gap-2 rounded-full pl-2 pr-1 py-1 hover:bg-slate-100">
                             <span class="hidden sm:block text-sm text-slate-700">{{ store.user.name || store.user.email }}</span>
                             <span class="inline-flex h-8 w-8 items-center justify-center rounded-full bg-slate-200 text-slate-700 text-sm font-medium">{{ (store.user.name||store.user.email||'?').charAt(0).toUpperCase() }}</span>
