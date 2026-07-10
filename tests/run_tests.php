@@ -185,24 +185,37 @@ check('reset with the real token succeeds, old password stops working', function
 });
 
 fwrite(STDOUT, "\n[10] Project type, floors & BOQ\n");
-check('project carries a type; floors + BOQ persist and total correctly', function () use ($db, $projectId) {
+check('project carries a type; floors + BOQ entries/lines total correctly', function () use ($db, $projectId) {
     $svc = new \App\Services\ProjectService();
     $type = (string)$db->fetchColumn('SELECT project_type FROM projects WHERE id=?', [$projectId]);
     if (!in_array($type, ['new', 'renovation'], true)) return false;
-    $floors = $svc->listFloors(DEMO, $projectId);
-    if (count($floors) < 3) return false;
+    if (count($svc->listFloors(DEMO, $projectId)) < 3) return false;
     $boq = $svc->listBoq(DEMO, $projectId);
-    // seed BOQ: GF 120*180 + 400*32 + F1 95*180 + F2 95*180 + 15000 = 21600+12800+17100+17100+15000
-    return abs($boq['total'] - 83600.00) < 0.01 && count($boq['items']) === 5;
+    // seed: RCC(120*180+95*180+95*180=55800) + Brick(400*32=12800) + Mob(15000) = 83600
+    return abs($boq['total'] - 83600.00) < 0.01 && count($boq['entries']) === 3;
 });
-check('saveBoq replaces items and recomputes amounts; cross-tenant blocked', function () use ($projectId) {
+check('saveBoqEntry creates entry+lines, update recomputes, delete works; cross-tenant blocked', function () use ($projectId) {
     $svc = new \App\Services\ProjectService();
-    $res = $svc->saveBoq(DEMO, $projectId, [
-        ['description' => 'Test item', 'unit' => 'nos', 'quantity' => 10, 'rate' => 25],
+    $floors = $svc->listFloors(DEMO, $projectId);
+    $fid = (int)$floors[0]['id'];
+    $entry = $svc->saveBoqEntry(DEMO, $projectId, [
+        'item_head' => 'Test Item', 'item_code' => 'TST-1', 'unit' => 'nos',
+        'lines' => [['project_floor_id' => $fid, 'quantity' => 10, 'rate' => 25], ['project_floor_id' => null, 'quantity' => 2, 'rate' => 100]],
     ]);
-    if (count($res['items']) !== 1 || abs($res['total'] - 250.00) > 0.01) return false;
-    try { $svc->saveBoq(999001, $projectId, [['description' => 'x', 'quantity' => 1, 'rate' => 1]]); return false; }
+    if (abs($entry['entry_total'] - 450.00) > 0.01 || count($entry['lines']) !== 2) return false;
+    $upd = $svc->updateBoqEntry(DEMO, (int)$entry['id'], ['lines' => [['project_floor_id' => $fid, 'quantity' => 5, 'rate' => 10]]]);
+    if (abs($upd['entry_total'] - 50.00) > 0.01) return false;
+    $svc->deleteBoqEntry(DEMO, (int)$entry['id']);
+    try { $svc->saveBoqEntry(999001, $projectId, ['item_head' => 'x', 'lines' => []]); return false; }
     catch (ServiceException $e) { return $e->code() === 'not_found'; }
+});
+check('currency: default is set and mirrored to the organisation', function () use ($db) {
+    $svc = new \App\Services\CurrencyService();
+    $def = $svc->default(DEMO);
+    if ($def['code'] !== 'INR' || $def['symbol'] !== '₹') return false;
+    $svc->create(DEMO, ['code' => 'EUR', 'symbol' => '€', 'is_default' => true]);
+    $now = $svc->default(DEMO);
+    return $now['code'] === 'EUR' && (string)$db->fetchColumn('SELECT currency_symbol FROM organisations WHERE id=?', [DEMO]) === '€';
 });
 
 // ---- summary ---------------------------------------------------------------

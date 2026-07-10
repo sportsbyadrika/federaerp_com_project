@@ -214,6 +214,16 @@ final class AuthService extends BaseService
         return $this->orgs->findById($orgId) ?? [];
     }
 
+    /** Default currency {code, symbol} for an organisation. */
+    public function orgCurrency(int $orgId): array
+    {
+        $row = Database::instance()->fetch(
+            'SELECT currency AS code, currency_symbol AS symbol FROM organisations WHERE id = :t',
+            [':t' => $orgId]
+        );
+        return $row ?: ['code' => 'USD', 'symbol' => '$'];
+    }
+
     private function publicUser(array $user): array
     {
         return [
