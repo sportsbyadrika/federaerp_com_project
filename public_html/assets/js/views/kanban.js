@@ -20,13 +20,15 @@
             const showNew = ref(false);
             const newTask = reactive({ title: '', status_id: null, priority: 'medium', assignee_id: null });
             const showNewProject = ref(false);
-            const newProject = reactive({ name: '', code: '', site_address: '', contract_value: 0, start_date: '', end_date: '' });
+            const clients = ref([]);
+            const newProject = reactive({ code: '', name: '', client_id: null, project_type: 'new', contract_value: 0, site_address: '', status: 'planning', start_date: '', end_date: '', description: '' });
             const savingProject = ref(false);
 
             async function loadProjects() {
                 loading.value = true;
                 try {
                     projects.value = (await api.get('/api/projects')).data;
+                    try { clients.value = (await api.get('/api/clients')).data; } catch (e) {}
                     if (projects.value.length) { activeId.value = projects.value[0].id; await loadBoard(); }
                 } catch (e) { CSApp.flash('error', e.message); }
                 finally { loading.value = false; }
@@ -81,16 +83,18 @@
                 if (!newProject.name.trim()) { CSApp.flash('error', 'Project name is required'); return; }
                 savingProject.value = true;
                 try {
-                    const payload = { name: newProject.name.trim() };
+                    const payload = { name: newProject.name.trim(), project_type: newProject.project_type, status: newProject.status };
                     if (newProject.code) payload.code = newProject.code;
-                    if (newProject.site_address) payload.site_address = newProject.site_address;
+                    if (newProject.client_id) payload.client_id = newProject.client_id;
                     if (newProject.contract_value) payload.contract_value = newProject.contract_value;
+                    if (newProject.site_address) payload.site_address = newProject.site_address;
                     if (newProject.start_date) payload.start_date = newProject.start_date;
                     if (newProject.end_date) payload.end_date = newProject.end_date;
+                    if (newProject.description) payload.description = newProject.description;
                     const created = (await api.post('/api/projects', payload)).data;
                     CSApp.flash('success', 'Project created: ' + created.name);
                     showNewProject.value = false;
-                    Object.assign(newProject, { name: '', code: '', site_address: '', contract_value: 0, start_date: '', end_date: '' });
+                    Object.assign(newProject, { code: '', name: '', client_id: null, project_type: 'new', contract_value: 0, site_address: '', status: 'planning', start_date: '', end_date: '', description: '' });
                     projects.value = (await api.get('/api/projects')).data;
                     activeId.value = created.id;   // select the new project (loads its board via watch)
                 } catch (e) { CSApp.flash('error', e.message); }
@@ -100,7 +104,7 @@
             const activeProject = computed(() => projects.value.find(p => p.id === activeId.value));
             const priorityColor = (p) => ({ low: 'bg-slate-100 text-slate-600', medium: 'bg-blue-50 text-blue-700', high: 'bg-amber-50 text-amber-700', urgent: 'bg-rose-50 text-rose-700' }[p] || 'bg-slate-100');
 
-            return { projects, activeId, board, loading, showNew, newTask, showNewProject, newProject, savingProject, activeProject, onDragStart, onDrop, addTask, createProject, priorityColor };
+            return { projects, activeId, board, loading, showNew, newTask, showNewProject, newProject, savingProject, clients, activeProject, onDragStart, onDrop, addTask, createProject, priorityColor };
         },
         template: `
         <div>
@@ -161,24 +165,28 @@
             <div v-if="showNewProject" class="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 px-4">
                 <div class="w-full max-w-lg bg-white rounded-xl shadow-xl p-6">
                     <div class="flex items-center justify-between mb-4"><h2 class="font-semibold text-slate-800">New project</h2><button @click="showNewProject=false" class="text-slate-400">✕</button></div>
-                    <div class="space-y-3">
-                        <div>
-                            <label class="block text-sm text-slate-600 mb-1">Project name *</label>
-                            <input v-model="newProject.name" placeholder="e.g. Harbor Villa Construction" class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-brand/40 focus:border-brand">
+                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                        <div><label class="block text-sm text-slate-600 mb-1">Code</label><input v-model="newProject.code" placeholder="auto if blank" class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-brand/40 focus:border-brand"></div>
+                        <div><label class="block text-sm text-slate-600 mb-1">Project name *</label><input v-model="newProject.name" placeholder="e.g. Harbor Villa" class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-brand/40 focus:border-brand"></div>
+                        <div><label class="block text-sm text-slate-600 mb-1">Client</label>
+                            <select v-model="newProject.client_id" class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"><option :value="null">— none —</option><option v-for="c in clients" :key="c.id" :value="c.id">{{ c.name }}</option></select>
                         </div>
-                        <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                            <div><label class="block text-sm text-slate-600 mb-1">Code</label><input v-model="newProject.code" placeholder="auto if blank" class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-brand/40 focus:border-brand"></div>
-                            <div><label class="block text-sm text-slate-600 mb-1">Contract value</label><input v-model.number="newProject.contract_value" type="number" step="0.01" class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-brand/40 focus:border-brand"></div>
+                        <div><label class="block text-sm text-slate-600 mb-1">Type of project</label>
+                            <select v-model="newProject.project_type" class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"><option value="new">New</option><option value="renovation">Renovation</option></select>
                         </div>
+                        <div><label class="block text-sm text-slate-600 mb-1">Contract value</label><input v-model.number="newProject.contract_value" type="number" step="0.01" class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-brand/40 focus:border-brand"></div>
                         <div><label class="block text-sm text-slate-600 mb-1">Site address</label><input v-model="newProject.site_address" class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-brand/40 focus:border-brand"></div>
-                        <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                            <div><label class="block text-sm text-slate-600 mb-1">Start date</label><input v-model="newProject.start_date" type="date" class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-brand/40 focus:border-brand"></div>
-                            <div><label class="block text-sm text-slate-600 mb-1">Target end</label><input v-model="newProject.end_date" type="date" class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-brand/40 focus:border-brand"></div>
+                        <div><label class="block text-sm text-slate-600 mb-1">Status</label>
+                            <select v-model="newProject.status" class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"><option value="planning">Planning</option><option value="active">Active</option><option value="on_hold">On hold</option><option value="completed">Completed</option></select>
                         </div>
-                        <div class="flex justify-end gap-2 pt-1">
-                            <button @click="showNewProject=false" class="px-4 py-2 text-sm rounded-lg border border-slate-300 text-slate-600">Cancel</button>
-                            <button @click="createProject" :disabled="savingProject" class="px-4 py-2 text-sm rounded-lg bg-brand text-white hover:bg-brand-dark disabled:opacity-60">{{ savingProject ? 'Creating…' : 'Create project' }}</button>
-                        </div>
+                        <div></div>
+                        <div><label class="block text-sm text-slate-600 mb-1">Start date</label><input v-model="newProject.start_date" type="date" class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"></div>
+                        <div><label class="block text-sm text-slate-600 mb-1">Target end date</label><input v-model="newProject.end_date" type="date" class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"></div>
+                        <div class="sm:col-span-2"><label class="block text-sm text-slate-600 mb-1">Description</label><textarea v-model="newProject.description" rows="2" class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-brand/40 focus:border-brand"></textarea></div>
+                    </div>
+                    <div class="flex justify-end gap-2 pt-3">
+                        <button @click="showNewProject=false" class="px-4 py-2 text-sm rounded-lg border border-slate-300 text-slate-600">Cancel</button>
+                        <button @click="createProject" :disabled="savingProject" class="px-4 py-2 text-sm rounded-lg bg-brand text-white hover:bg-brand-dark disabled:opacity-60">{{ savingProject ? 'Creating…' : 'Create project' }}</button>
                     </div>
                 </div>
             </div>

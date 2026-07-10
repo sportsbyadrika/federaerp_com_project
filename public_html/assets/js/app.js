@@ -63,6 +63,7 @@
                     const r = await api.post('/api/auth/login', { email: login.email, password: login.password, recaptcha_token: captcha.value });
                     api.setCsrf(r.data.csrf_token);
                     store.user = r.data.user;
+                    if (r.data.currency) store.currency = r.data.currency;
                     CSApp.navigate('/');
                 } catch (e) { error.value = e.message || 'Login failed'; }
                 finally { busy.value = false; }
@@ -243,7 +244,7 @@
                 finally { loading.value = false; }
             }
             onMounted(load);
-            const fmt = (n) => new Intl.NumberFormat().format(n ?? 0);
+            const fmt = (n) => CSApp.money(n);
             return { loading, error, data, role, fmt };
         },
         template: `
