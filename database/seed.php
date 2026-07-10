@@ -76,11 +76,7 @@ try {
         'password_hash' => hash_pw(PASSWORD), 'role' => 'staff', 'job_role' => 'site_supervisor', 'status' => 'active',
     ]);
 
-    // Demonstrate same-email-across-orgs isolation: admin@skyline.test also in super org.
-    $db->insert('users', [
-        'organisation_id' => SUPER_ORG, 'name' => 'Shared Email Demo', 'email' => 'admin@skyline.test',
-        'password_hash' => hash_pw(PASSWORD), 'role' => 'staff', 'job_role' => 'accountant', 'status' => 'active',
-    ]);
+    // (Email is globally unique — the same address cannot exist under two orgs.)
 
     // ---- Client + construction model + base rates -------------------------
     $clientId = $db->insert('clients', [
@@ -144,10 +140,34 @@ try {
     // ---- Project + kanban board -------------------------------------------
     $projectId = $db->insert('projects', [
         'tenant_id' => DEMO_ORG, 'client_id' => $clientId, 'estimate_id' => $estId,
-        'code' => 'PRJ-0001', 'name' => 'Harbor Villa Construction', 'site_address' => '12 Dockside Ave, Metro City',
+        'code' => 'PRJ-0001', 'name' => 'Harbor Villa Construction', 'project_type' => 'new',
+        'site_address' => '12 Dockside Ave, Metro City',
         'contract_value' => 500000, 'start_date' => '2026-01-15', 'end_date' => '2026-12-20',
         'status' => 'active', 'progress_percent' => 35, 'project_manager_id' => $pmId,
     ]);
+
+    // Floors + a small Bill of Quantities (some split by floor).
+    $floorIds = [];
+    foreach ([['GF', 'Ground Floor', 0], ['F1', '1st Floor', 1], ['F2', '2nd Floor', 2]] as [$code, $label, $ord]) {
+        $floorIds[$code] = $db->insert('project_floors', [
+            'tenant_id' => DEMO_ORG, 'project_id' => $projectId, 'code' => $code, 'label' => $label, 'sort_order' => $ord,
+        ]);
+    }
+    $boq = [
+        [$floorIds['GF'], 'CIV-01', 'RCC framing', 'cu.m', 120, 180],
+        [$floorIds['GF'], 'MAS-01', 'Brick masonry', 'sq.m', 400, 32],
+        [$floorIds['F1'], 'CIV-01', 'RCC framing', 'cu.m', 95, 180],
+        [$floorIds['F2'], 'CIV-01', 'RCC framing', 'cu.m', 95, 180],
+        [null, 'GEN-01', 'Site mobilization (project-wide)', 'lot', 1, 15000],
+    ];
+    $ord = 0;
+    foreach ($boq as [$fid, $code, $desc, $unit, $qty, $rate]) {
+        $db->insert('boq_items', [
+            'tenant_id' => DEMO_ORG, 'project_id' => $projectId, 'project_floor_id' => $fid,
+            'item_code' => $code, 'description' => $desc, 'unit' => $unit,
+            'quantity' => $qty, 'rate' => $rate, 'amount' => round($qty * $rate, 2), 'sort_order' => $ord++,
+        ]);
+    }
 
     $columns = [
         ['To Do', '#94a3b8', 0, 0],

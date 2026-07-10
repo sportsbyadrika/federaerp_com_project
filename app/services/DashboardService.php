@@ -34,7 +34,14 @@ final class DashboardService extends BaseService
         $income = (float)$db->fetchColumn("SELECT COALESCE(SUM(amount),0) FROM transactions WHERE tenant_id=:t AND txn_type='income'", $p);
         $expense = (float)$db->fetchColumn("SELECT COALESCE(SUM(amount),0) FROM transactions WHERE tenant_id=:t AND txn_type='expense'", $p);
 
+        $org = $db->fetch(
+            "SELECT id, name, legal_name, email, phone, address, city, country, currency, created_at
+               FROM organisations WHERE id = :t",
+            $p
+        );
+
         return [
+            'organisation' => $org,
             'projects' => [
                 'total'  => (int)$db->fetchColumn("SELECT COUNT(*) FROM projects WHERE tenant_id=:t AND deleted_at IS NULL", $p),
                 'active' => (int)$db->fetchColumn("SELECT COUNT(*) FROM projects WHERE tenant_id=:t AND status='active' AND deleted_at IS NULL", $p),

@@ -17,7 +17,16 @@ final class UserModel extends BaseModel
         'job_role', 'phone', 'status', 'last_login_at',
     ];
 
-    /** The core of the 3-field login: match a user within a specific org. */
+    /** Email is globally unique — the sole identifier at login. */
+    public function findByEmail(string $email): ?array
+    {
+        return $this->db->fetch(
+            'SELECT * FROM users WHERE email = :email AND deleted_at IS NULL',
+            [':email' => strtolower(trim($email))]
+        );
+    }
+
+    /** Retained for admin flows: match a user within a specific org. */
     public function findByOrgAndEmail(int $organisationId, string $email): ?array
     {
         return $this->db->fetch(
@@ -27,10 +36,11 @@ final class UserModel extends BaseModel
         );
     }
 
-    public function emailExistsInOrg(int $organisationId, string $email, ?int $excludeId = null): bool
+    /** Email must be unique across the whole platform now. */
+    public function emailExists(string $email, ?int $excludeId = null): bool
     {
-        $sql = 'SELECT 1 FROM users WHERE organisation_id = :org AND email = :email AND deleted_at IS NULL';
-        $params = [':org' => $organisationId, ':email' => strtolower(trim($email))];
+        $sql = 'SELECT 1 FROM users WHERE email = :email AND deleted_at IS NULL';
+        $params = [':email' => strtolower(trim($email))];
         if ($excludeId !== null) {
             $sql .= ' AND id <> :id';
             $params[':id'] = $excludeId;

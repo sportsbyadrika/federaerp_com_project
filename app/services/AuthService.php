@@ -25,20 +25,22 @@ final class AuthService extends BaseService
     }
 
     /**
-     * 3-field login. Validate the org exists, then match the user WITHIN that
-     * org, then verify the password. Uniform error message so we don't reveal
-     * which of the three fields was wrong.
+     * Login with Email + Password (email is globally unique; the tenant is
+     * derived from the user's record). Uniform error so we don't reveal which
+     * field was wrong.
      */
-    public function login(int $organisationId, string $email, string $password): array
+    public function login(string $email, string $password): array
     {
-        $genericError = new ServiceException('Invalid organisation ID, email, or password', 'invalid_credentials', 401);
+        $genericError = new ServiceException('Invalid email or password', 'invalid_credentials', 401);
 
-        if (!$this->orgs->existsById($organisationId)) {
-            throw $genericError;
-        }
-        $user = $this->users->findByOrgAndEmail($organisationId, $email);
+        $user = $this->users->findByEmail($email);
         if ($user === null || $user['status'] === 'disabled') {
             throw $genericError;
+        }
+        // The user's organisation must still be active.
+        $org = $this->orgs->findById((int)$user['organisation_id']);
+        if ($org === null || ($org['status'] ?? 'active') === 'suspended') {
+            throw new ServiceException('This organisation is not active. Contact your administrator.', 'org_suspended', 403);
         }
         if (!password_verify($password, $user['password_hash'])) {
             throw $genericError;
@@ -63,6 +65,10 @@ final class AuthService extends BaseService
     {
         $db = Database::instance();
         $email = strtolower(trim((string)$data['admin_email']));
+
+        if ($this->users->emailExists($email)) {
+            throw ServiceException::conflict('That email is already registered. Please sign in or reset your password.');
+        }
 
         $db->beginTransaction();
         try {
@@ -107,8 +113,8 @@ final class AuthService extends BaseService
     public function createStaff(int $tenantId, array $data): array
     {
         $email = strtolower(trim((string)$data['email']));
-        if ($this->users->emailExistsInOrg($tenantId, $email)) {
-            throw ServiceException::conflict('A user with that email already exists in this organisation');
+        if ($this->users->emailExists($email)) {
+            throw ServiceException::conflict('A user with that email already exists');
         }
         $role = $data['role'] ?? 'staff';
         if (!in_array($role, ['org_admin', 'staff'], true)) {
@@ -130,6 +136,52 @@ final class AuthService extends BaseService
     public function listStaff(int $tenantId): array
     {
         return $this->users->forOrg($tenantId);
+    }
+
+    /**
+     * Start a password reset: create a one-time token (1h expiry) and email a
+     * reset link. Always returns quietly (no account enumeration).
+     */
+    public function forgotPassword(string $email): void
+    {
+        $email = strtolower(trim($email));
+        $user = $this->users->findByEmail($email);
+        if ($user === null) {
+            return; // don't reveal whether the email exists
+        }
+        $db = Database::instance();
+        // Invalidate previous unused tokens for this user.
+        $db->execute('UPDATE password_resets SET used_at = NOW() WHERE user_id = :u AND used_at IS NULL', [':u' => (int)$user['id']]);
+
+        $token = bin2hex(random_bytes(32));
+        $db->execute(
+            'INSERT INTO password_resets (user_id, email, token_hash, expires_at) VALUES (:u, :e, :h, DATE_ADD(NOW(), INTERVAL 1 HOUR))',
+            [':u' => (int)$user['id'], ':e' => $email, ':h' => hash('sha256', $token)]
+        );
+
+        $appUrl = rtrim((string)\Core\Env::get('APP_URL', ''), '/');
+        $link = $appUrl . '/#/reset?token=' . $token;
+        $appName = (string)\Core\Env::get('APP_NAME', 'Federa ERP');
+        $html = '<p>Hello,</p><p>We received a request to reset your ' . htmlspecialchars($appName) . ' password.</p>'
+              . '<p><a href="' . htmlspecialchars($link) . '">Click here to set a new password</a>. This link expires in 1 hour.</p>'
+              . '<p>If you did not request this, you can ignore this email.</p><p>— ' . htmlspecialchars($appName) . '</p>';
+        \Core\Mailer::send($email, 'Reset your ' . $appName . ' password', $html,
+            "Reset your {$appName} password:\n{$link}\n(expires in 1 hour)");
+    }
+
+    /** Complete a password reset using the emailed token. */
+    public function resetPassword(string $token, string $newPassword): void
+    {
+        $db = Database::instance();
+        $row = $db->fetch(
+            'SELECT * FROM password_resets WHERE token_hash = :h AND used_at IS NULL AND expires_at > NOW() ORDER BY id DESC LIMIT 1',
+            [':h' => hash('sha256', $token)]
+        );
+        if ($row === null) {
+            throw new ServiceException('This reset link is invalid or has expired.', 'invalid_token', 422);
+        }
+        $this->users->updatePassword((int)$row['user_id'], password_hash($newPassword, PASSWORD_DEFAULT));
+        $db->execute('UPDATE password_resets SET used_at = NOW() WHERE id = :id', [':id' => (int)$row['id']]);
     }
 
     public function changePassword(int $userId, string $current, string $new): void

@@ -4,6 +4,7 @@ declare(strict_types=1);
 namespace App\Controllers;
 
 use App\Services\AuthService;
+use App\Services\CaptchaService;
 use Core\Auth;
 use Core\Controller;
 use Core\Csrf;
@@ -25,19 +26,30 @@ final class AuthController extends Controller
         Response::success(['csrf_token' => Csrf::token()]);
     }
 
-    /** POST /api/auth/login — 3-field login. */
+    /** Public front-end config: reCAPTCHA site key + app name. */
+    public function config(Request $request): void
+    {
+        Response::success([
+            'app_name'           => (string)\Core\Env::get('APP_NAME', 'Federa ERP'),
+            'captcha_enabled'    => CaptchaService::enabled(),
+            'recaptcha_site_key' => CaptchaService::siteKey(),
+            'csrf_token'         => Csrf::token(),
+        ]);
+    }
+
+    /** POST /api/auth/login — Email + Password (+ CAPTCHA when enabled). */
     public function login(Request $request): void
     {
         $data = $this->validate($request, [
-            'organisation_id' => 'required|digits:6',
-            'email'           => 'required|email',
-            'password'        => 'required|string',
+            'email'    => 'required|email',
+            'password' => 'required|string',
         ]);
         if ($data === null) {
             return;
         }
-        $this->guard(function () use ($data) {
-            $user = $this->auth->login((int)$data['organisation_id'], $data['email'], $data['password']);
+        $this->guard(function () use ($request, $data) {
+            CaptchaService::verify($request->input('recaptcha_token'), $this->clientIp($request));
+            $user = $this->auth->login($data['email'], $data['password']);
             Response::success([
                 'user'       => $user,
                 'csrf_token' => Csrf::token(),
@@ -45,7 +57,7 @@ final class AuthController extends Controller
         });
     }
 
-    /** POST /api/auth/register-organisation — onboarding. */
+    /** POST /api/auth/register-organisation — onboarding (+ CAPTCHA when enabled). */
     public function registerOrganisation(Request $request): void
     {
         $data = $this->validate($request, [
@@ -58,9 +70,46 @@ final class AuthController extends Controller
             return;
         }
         $this->guard(function () use ($request) {
+            CaptchaService::verify($request->input('recaptcha_token'), $this->clientIp($request));
             $result = $this->auth->registerOrganisation($request->all());
             Response::success($result, [], 201);
         });
+    }
+
+    /** POST /api/auth/forgot-password — email a reset link. */
+    public function forgotPassword(Request $request): void
+    {
+        $data = $this->validate($request, ['email' => 'required|email']);
+        if ($data === null) {
+            return;
+        }
+        $this->guard(function () use ($request, $data) {
+            CaptchaService::verify($request->input('recaptcha_token'), $this->clientIp($request));
+            $this->auth->forgotPassword($data['email']);
+            // Always success — no account enumeration.
+            Response::success(['message' => 'If that email is registered, a reset link has been sent.']);
+        });
+    }
+
+    /** POST /api/auth/reset-password — set a new password using the token. */
+    public function resetPassword(Request $request): void
+    {
+        $data = $this->validate($request, [
+            'token'    => 'required|string',
+            'password' => 'required|string|min:8|confirmed',
+        ]);
+        if ($data === null) {
+            return;
+        }
+        $this->guard(function () use ($data) {
+            $this->auth->resetPassword($data['token'], $data['password']);
+            Response::success(['message' => 'Password updated. You can now sign in.']);
+        });
+    }
+
+    private function clientIp(Request $request): ?string
+    {
+        return $_SERVER['REMOTE_ADDR'] ?? null;
     }
 
     /** GET /api/auth/me — current user. */

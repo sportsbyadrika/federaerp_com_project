@@ -17,6 +17,8 @@ final class ProjectService extends BaseService
     private GenericModel $progress;
     private GenericModel $checklists;
     private GenericModel $checklistItems;
+    private GenericModel $floors;
+    private GenericModel $boq;
 
     public function __construct()
     {
@@ -31,9 +33,11 @@ final class ProjectService extends BaseService
             'tenant_id', 'checklist_id', 'label', 'is_checked', 'remark', 'sort_order',
         ]);
         $this->projects = new GenericModel('projects', [
-            'tenant_id', 'client_id', 'estimate_id', 'code', 'name', 'description', 'site_address',
+            'tenant_id', 'client_id', 'estimate_id', 'code', 'name', 'project_type', 'description', 'site_address',
             'contract_value', 'start_date', 'end_date', 'status', 'progress_percent', 'project_manager_id',
         ], softDelete: true);
+        $this->floors = new GenericModel('project_floors', ['tenant_id', 'project_id', 'code', 'label', 'sort_order']);
+        $this->boq = new GenericModel('boq_items', ['tenant_id', 'project_id', 'project_floor_id', 'item_code', 'description', 'unit', 'quantity', 'rate', 'amount', 'sort_order']);
         $this->statuses = new GenericModel('task_statuses', [
             'tenant_id', 'project_id', 'name', 'color', 'position', 'is_done',
         ]);
@@ -62,6 +66,7 @@ final class ProjectService extends BaseService
             'estimate_id'        => $input['estimate_id'] ?? null,
             'code'               => $input['code'] ?? $this->nextCode($tenantId),
             'name'               => (string)$input['name'],
+            'project_type'       => in_array(($input['project_type'] ?? 'new'), ['new', 'renovation'], true) ? $input['project_type'] : 'new',
             'description'        => $input['description'] ?? null,
             'site_address'       => $input['site_address'] ?? null,
             'contract_value'     => $input['contract_value'] ?? 0,
@@ -142,6 +147,120 @@ final class ProjectService extends BaseService
             'status'            => $status,
         ]);
         return $this->milestones->findOrFail($milestoneId, $tenantId);
+    }
+
+    // ---- Floors ------------------------------------------------------------
+    public function listFloors(int $tenantId, int $projectId): array
+    {
+        return $this->floors->forTenant($tenantId, ['project_id' => $projectId], ['order_by' => 'sort_order', 'order_dir' => 'ASC']);
+    }
+
+    /**
+     * Sync a project's floors to the given set (add new, remove missing), by
+     * `code`. Kept floors retain their BOQ associations.
+     * @param array $floors list of {code,label,sort_order}
+     */
+    public function setFloors(int $tenantId, int $projectId, array $floors): array
+    {
+        $this->projects->findOrFail($projectId, $tenantId);
+        $db = Database::instance();
+        $db->beginTransaction();
+        try {
+            $existing = [];
+            foreach ($this->floors->forTenant($tenantId, ['project_id' => $projectId]) as $f) {
+                $existing[$f['code']] = (int)$f['id'];
+            }
+            $desired = [];
+            foreach ($floors as $f) {
+                $code = trim((string)($f['code'] ?? ''));
+                if ($code === '') continue;
+                $desired[$code] = [
+                    'label'      => (string)($f['label'] ?? $code),
+                    'sort_order' => (int)($f['sort_order'] ?? 0),
+                ];
+            }
+            // Insert new
+            foreach ($desired as $code => $d) {
+                if (!isset($existing[$code])) {
+                    $this->floors->create([
+                        'tenant_id' => $tenantId, 'project_id' => $projectId,
+                        'code' => $code, 'label' => $d['label'], 'sort_order' => $d['sort_order'],
+                    ]);
+                } else {
+                    $this->floors->update($existing[$code], $tenantId, ['label' => $d['label'], 'sort_order' => $d['sort_order']]);
+                }
+            }
+            // Delete removed
+            foreach ($existing as $code => $id) {
+                if (!isset($desired[$code])) {
+                    $this->floors->delete($id, $tenantId);
+                }
+            }
+            $db->commit();
+        } catch (\Throwable $e) {
+            $db->rollBack();
+            throw $e;
+        }
+        return $this->listFloors($tenantId, $projectId);
+    }
+
+    // ---- Bill of Quantities (BOQ) -----------------------------------------
+    public function listBoq(int $tenantId, int $projectId): array
+    {
+        $rows = Database::instance()->fetchAll(
+            'SELECT b.*, f.code AS floor_code, f.label AS floor_label
+               FROM boq_items b
+               LEFT JOIN project_floors f ON f.id = b.project_floor_id
+              WHERE b.tenant_id = :t AND b.project_id = :p
+              ORDER BY b.sort_order ASC, b.id ASC',
+            [':t' => $tenantId, ':p' => $projectId]
+        );
+        $total = 0.0;
+        foreach ($rows as $r) { $total += (float)$r['amount']; }
+        return ['items' => $rows, 'total' => round($total, 2)];
+    }
+
+    /**
+     * Replace the whole BOQ for a project with the provided items (editable
+     * grid save). Each item: {project_floor_id?, item_code, description, unit,
+     * quantity, rate}. Amount is computed server-side.
+     */
+    public function saveBoq(int $tenantId, int $projectId, array $items): array
+    {
+        $this->projects->findOrFail($projectId, $tenantId);
+        // Validate floor ownership up front.
+        $validFloorIds = [];
+        foreach ($this->floors->forTenant($tenantId, ['project_id' => $projectId]) as $f) {
+            $validFloorIds[(int)$f['id']] = true;
+        }
+        $db = Database::instance();
+        $db->beginTransaction();
+        try {
+            $db->execute('DELETE FROM boq_items WHERE tenant_id = :t AND project_id = :p', [':t' => $tenantId, ':p' => $projectId]);
+            $order = 0;
+            foreach ($items as $it) {
+                $desc = trim((string)($it['description'] ?? ''));
+                if ($desc === '') continue;
+                $floorId = isset($it['project_floor_id']) && $it['project_floor_id'] !== '' && $it['project_floor_id'] !== null
+                    ? (int)$it['project_floor_id'] : null;
+                if ($floorId !== null && !isset($validFloorIds[$floorId])) {
+                    $floorId = null; // ignore floors that don't belong to this project
+                }
+                $qty = (float)($it['quantity'] ?? 0);
+                $rate = (float)($it['rate'] ?? 0);
+                $this->boq->create([
+                    'tenant_id' => $tenantId, 'project_id' => $projectId, 'project_floor_id' => $floorId,
+                    'item_code' => $it['item_code'] ?? null, 'description' => $desc,
+                    'unit' => $it['unit'] ?? null, 'quantity' => $qty, 'rate' => $rate,
+                    'amount' => round($qty * $rate, 2), 'sort_order' => $order++,
+                ]);
+            }
+            $db->commit();
+        } catch (\Throwable $e) {
+            $db->rollBack();
+            throw $e;
+        }
+        return $this->listBoq($tenantId, $projectId);
     }
 
     // ---- Work progress logs ----------------------------------------------
