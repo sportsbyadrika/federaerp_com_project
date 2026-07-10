@@ -53,8 +53,11 @@ try {
         'currency' => 'USD', 'status' => 'active',
     ]);
     $db->insert('organisations', [
-        'id' => DEMO_ORG, 'name' => 'Skyline Builders Ltd', 'legal_name' => 'Skyline Builders Limited',
-        'email' => 'info@skyline.example', 'city' => 'Metro City', 'country' => 'India',
+        'id' => DEMO_ORG, 'name' => 'Skyline Builders Ltd', 'legal_name' => 'Skyline Builders Private Limited',
+        'gst_number' => '29ABCDE1234F1Z5', 'pan' => 'ABCDE1234F',
+        'letterhead_address' => "12 Skyline Tower, MG Road, Metro City, Karnataka 560001\nTel: +91-80-5555-0100",
+        'email' => 'info@skyline.example', 'phone' => '+91-80-5555-0100', 'address' => '12 Skyline Tower, MG Road',
+        'city' => 'Metro City', 'country' => 'India',
         'currency' => 'INR', 'currency_symbol' => '₹', 'status' => 'active',
     ]);
 
@@ -81,7 +84,8 @@ try {
     // ---- Client + construction model + base rates -------------------------
     $clientId = $db->insert('clients', [
         'tenant_id' => DEMO_ORG, 'name' => 'Harbor Development Corp', 'contact_person' => 'Dana Client',
-        'email' => 'dana@harbor.example', 'phone' => '+1-555-0100', 'address' => '12 Dockside Ave',
+        'email' => 'dana@harbor.example', 'phone' => '+91-98450-00100',
+        'gst_number' => '29HARBR5678K1Z2', 'pan' => 'HARBR5678K', 'address' => '12 Dockside Ave',
     ]);
     $modelId = $db->insert('construction_models', [
         'tenant_id' => DEMO_ORG, 'name' => 'Standard Residential Villa', 'category' => 'residential',
@@ -299,7 +303,8 @@ try {
     // ---- Subcontractor + work order + RA bill -----------------------------
     $scId = $db->insert('subcontractors', [
         'tenant_id' => DEMO_ORG, 'name' => 'SteelFix Contractors', 'trade' => 'Structural Steel',
-        'contact_person' => 'Ravi Steel', 'phone' => '+1-555-0199',
+        'contact_person' => 'Ravi Steel', 'phone' => '+91-98450-00199',
+        'gst_number' => '29STEEL9012L1Z8', 'pan' => 'STEEL9012L',
     ]);
     $woId = $db->insert('subcontractor_work_orders', [
         'tenant_id' => DEMO_ORG, 'subcontractor_id' => $scId, 'project_id' => $projectId,
@@ -325,7 +330,7 @@ try {
     // ---- Suppliers, materials, stock --------------------------------------
     $supId = $db->insert('suppliers', [
         'tenant_id' => DEMO_ORG, 'name' => 'BuildMart Supplies', 'contact_person' => 'Nina Supply',
-        'phone' => '+1-555-0170', 'rating' => 4.5,
+        'phone' => '+91-98450-00170', 'gst_number' => '29BUILD3456M1Z1', 'pan' => 'BUILD3456M', 'rating' => 4.5,
     ]);
     $matCement = $db->insert('material_catalog', [
         'tenant_id' => DEMO_ORG, 'code' => 'CEM01', 'name' => 'Cement (OPC)', 'category' => 'Binders',

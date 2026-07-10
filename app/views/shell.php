@@ -58,6 +58,7 @@ $bootstrap = json_encode([
     <script src="/assets/js/store.js"></script>
     <!-- Feature views (register routes/components before app.js mounts) -->
     <script src="/assets/js/views/masters.js"></script>
+    <script src="/assets/js/views/institution.js"></script>
     <script src="/assets/js/views/estimation.js"></script>
     <script src="/assets/js/views/kanban.js"></script>
     <script src="/assets/js/views/project-detail.js"></script>

@@ -111,6 +111,12 @@ return function (Router $router, array $auth, array $write): void {
         // ---- Reports (JSON definition, or ?format=csv) --------------------
         $r->get('/reports/{report}', 'ReportController@show', $auth);
 
+        // ---- Institution settings -----------------------------------------
+        $r->get('/organisation', 'OrganisationController@show', $auth);
+        $r->get('/organisation/logo', 'OrganisationController@logo', $auth);
+        $r->put('/organisation', 'OrganisationController@update', array_merge($write, [OrgAdminOnly::class]));
+        $r->post('/organisation/logo', 'OrganisationController@uploadLogo', array_merge($write, [OrgAdminOnly::class]));
+
         // ---- Currencies + settings ----------------------------------------
         $r->get('/settings', 'CurrencyController@settings', $auth);
         $r->get('/currencies', 'CurrencyController@index', $auth);

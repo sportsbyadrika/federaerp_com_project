@@ -209,6 +209,18 @@ check('saveBoqEntry creates entry+lines, update recomputes, delete works; cross-
     try { $svc->saveBoqEntry(999001, $projectId, ['item_head' => 'x', 'lines' => []]); return false; }
     catch (ServiceException $e) { return $e->code() === 'not_found'; }
 });
+check('institution settings: GST/PAN/letterhead update + party GST/PAN persist', function () use ($db) {
+    $svc = new \App\Services\OrganisationService();
+    $before = $svc->get(DEMO);
+    if ($before['gst_number'] !== '29ABCDE1234F1Z5' || $before['pan'] !== 'ABCDE1234F') return false;
+    $upd = $svc->update(DEMO, ['gst_number' => '29ZZZZZ0000Z1Z9', 'letterhead_address' => 'New Address Line', 'legal_name' => 'Skyline Renamed Pvt Ltd']);
+    if ($upd['gst_number'] !== '29ZZZZZ0000Z1Z9' || $upd['letterhead_address'] !== 'New Address Line') return false;
+    // party masters carry GST + PAN (tax_number renamed)
+    $client = $db->fetch('SELECT gst_number, pan FROM clients WHERE tenant_id=? LIMIT 1', [DEMO]);
+    $sub = $db->fetch('SELECT gst_number, pan FROM subcontractors WHERE tenant_id=? LIMIT 1', [DEMO]);
+    $noTax = (int)$db->fetchColumn("SELECT COUNT(*) FROM information_schema.columns WHERE table_schema=DATABASE() AND table_name='suppliers' AND column_name='tax_number'");
+    return $client && $client['pan'] === 'HARBR5678K' && $sub && $sub['gst_number'] === '29STEEL9012L1Z8' && $noTax === 0;
+});
 check('currency: default is set and mirrored to the organisation', function () use ($db) {
     $svc = new \App\Services\CurrencyService();
     $def = $svc->default(DEMO);

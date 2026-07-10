@@ -59,28 +59,32 @@
         },
         'clients': {
             label: 'Clients', endpoint: '/api/clients',
-            columns: [{ key: 'name', label: 'Name' }, { key: 'contact_person', label: 'Contact' }, { key: 'email', label: 'Email' }, { key: 'phone', label: 'Phone' }],
+            columns: [{ key: 'name', label: 'Name' }, { key: 'contact_person', label: 'Contact' }, { key: 'gst_number', label: 'GST' }, { key: 'pan', label: 'PAN' }, { key: 'phone', label: 'Phone' }],
             fields: [
                 { key: 'name', label: 'Name', type: 'text', required: true },
                 { key: 'contact_person', label: 'Contact person', type: 'text' },
-                { key: 'email', label: 'Email', type: 'email' }, { key: 'phone', label: 'Phone', type: 'text' }, { key: 'address', label: 'Address', type: 'text' },
+                { key: 'email', label: 'Email', type: 'email' }, { key: 'phone', label: 'Phone', type: 'text' },
+                { key: 'gst_number', label: 'GST number', type: 'text' }, { key: 'pan', label: 'PAN', type: 'text' },
+                { key: 'address', label: 'Address', type: 'text' },
             ],
         },
         'suppliers': {
             label: 'Suppliers', endpoint: '/api/suppliers',
-            columns: [{ key: 'name', label: 'Name' }, { key: 'contact_person', label: 'Contact' }, { key: 'phone', label: 'Phone' }],
+            columns: [{ key: 'name', label: 'Name' }, { key: 'contact_person', label: 'Contact' }, { key: 'gst_number', label: 'GST' }, { key: 'pan', label: 'PAN' }, { key: 'phone', label: 'Phone' }],
             fields: [
                 { key: 'name', label: 'Name', type: 'text', required: true }, { key: 'contact_person', label: 'Contact person', type: 'text' },
                 { key: 'email', label: 'Email', type: 'email' }, { key: 'phone', label: 'Phone', type: 'text' },
+                { key: 'gst_number', label: 'GST number', type: 'text' }, { key: 'pan', label: 'PAN', type: 'text' },
             ],
         },
         'subcontractors': {
             label: 'Sub-contractors', endpoint: '/api/subcontractors',
-            columns: [{ key: 'name', label: 'Name' }, { key: 'trade', label: 'Trade' }, { key: 'contact_person', label: 'Contact' }, { key: 'phone', label: 'Phone' }],
+            columns: [{ key: 'name', label: 'Name' }, { key: 'trade', label: 'Trade' }, { key: 'gst_number', label: 'GST' }, { key: 'pan', label: 'PAN' }, { key: 'phone', label: 'Phone' }],
             fields: [
                 { key: 'name', label: 'Name', type: 'text', required: true }, { key: 'trade', label: 'Trade', type: 'text', placeholder: 'e.g. Structural Steel' },
                 { key: 'contact_person', label: 'Contact person', type: 'text' }, { key: 'email', label: 'Email', type: 'email' },
-                { key: 'phone', label: 'Phone', type: 'text' }, { key: 'tax_number', label: 'Tax number', type: 'text' },
+                { key: 'phone', label: 'Phone', type: 'text' },
+                { key: 'gst_number', label: 'GST number', type: 'text' }, { key: 'pan', label: 'PAN', type: 'text' },
             ],
         },
         'materials': {
@@ -167,7 +171,10 @@
         },
         template: `
         <div>
-            <h1 class="text-xl font-semibold text-slate-800 mb-1">Setup</h1>
+            <div class="flex items-center justify-between mb-1">
+                <h1 class="text-xl font-semibold text-slate-800">Setup</h1>
+                <a href="#/institution" class="px-3 py-1.5 text-sm rounded-lg border border-slate-300 text-slate-600 hover:bg-slate-50">🏢 Institution settings</a>
+            </div>
             <p class="text-sm text-slate-500 mb-5">Reference data used across the app. Construction models, base rates and BOQ items feed Estimation &amp; BOQ.</p>
 
             <div class="flex flex-wrap gap-2 mb-5">
