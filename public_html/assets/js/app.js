@@ -362,8 +362,8 @@
                 return [
                     { label: 'Dashboard', href: '#/' },
                     { label: 'Projects', href: '#/projects' },
-                    { label: 'Estimation', href: '#/estimates' },
-                    { label: 'Billing', href: '#/billing' },
+                    { label: 'Expenditure', href: '#/expenditure' },
+                    { label: 'Income', href: '#/income' },
                     { label: 'Documents', href: '#/documents' },
                     { label: 'Reports', href: '#/reports' },
                     { label: 'Setup', href: '#/setup' },

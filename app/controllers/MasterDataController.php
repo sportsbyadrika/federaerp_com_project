@@ -48,6 +48,11 @@ final class MasterDataController extends Controller
             'fillable' => ['tenant_id','name','sort_order'],
             'required' => ['name' => 'required|string|max:40'],
         ],
+        'expenditure-types' => [
+            'table' => 'expenditure_types', 'soft' => false,
+            'fillable' => ['tenant_id','name','sort_order'],
+            'required' => ['name' => 'required|string|max:80'],
+        ],
         'boq-items' => [
             'table' => 'boq_item_master', 'soft' => true,
             'fillable' => ['tenant_id','project_type','item_code','item_head','description','unit','default_rate','is_active'],

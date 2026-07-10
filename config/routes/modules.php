@@ -55,7 +55,10 @@ return function (Router $router, array $auth, array $write): void {
         $r->put('/boq-entries/{id}', 'ProjectController@updateBoqEntry', $write);
         $r->delete('/boq-entries/{id}', 'ProjectController@deleteBoqEntry', $write);
         $r->get('/projects/{id}/stages', 'ProjectController@stages', $auth);
-        $r->post('/projects/{id}/stages', 'ProjectController@saveStages', $write);
+        $r->post('/projects/{id}/stages', 'ProjectController@createStage', $write);
+        $r->put('/stages/{id}', 'ProjectController@updateStage', $write);
+        $r->delete('/stages/{id}', 'ProjectController@deleteStage', $write);
+        $r->get('/projects/{id}/tasks', 'ProjectController@tasksList', $auth);
 
         // ---- Kanban tasks -------------------------------------------------
         $r->get('/projects/{id}/board', 'TaskController@board', $auth);
@@ -113,6 +116,17 @@ return function (Router $router, array $auth, array $write): void {
         // ---- Reports (JSON definition, or ?format=csv) --------------------
         $r->get('/reports/{report}', 'ReportController@show', $auth);
 
+        // ---- Expenditure & Income -----------------------------------------
+        $r->get('/expenditures', 'ExpenditureController@index', $auth);
+        $r->post('/expenditures', 'ExpenditureController@store', $write);
+        $r->put('/expenditures/{id}', 'ExpenditureController@update', $write);
+        $r->delete('/expenditures/{id}', 'ExpenditureController@destroy', $write);
+        $r->get('/incomes', 'IncomeController@index', $auth);
+        $r->get('/incomes/{id}', 'IncomeController@show', $auth);
+        $r->post('/incomes', 'IncomeController@store', $write);
+        $r->put('/incomes/{id}', 'IncomeController@update', $write);
+        $r->delete('/incomes/{id}', 'IncomeController@destroy', $write);
+
         // ---- Institution settings -----------------------------------------
         $r->get('/organisation', 'OrganisationController@show', $auth);
         $r->get('/organisation/logo', 'OrganisationController@logo', $auth);
@@ -127,7 +141,7 @@ return function (Router $router, array $auth, array $write): void {
         $r->delete('/currencies/{id}', 'CurrencyController@destroy', $write);
 
         // ---- Master data (generic tenant-scoped CRUD) ---------------------
-        $resources = ['clients','suppliers','construction-models','base-rates','materials','subcontractors','vehicles','employees','unit-types','boq-items'];
+        $resources = ['clients','suppliers','construction-models','base-rates','materials','subcontractors','vehicles','employees','unit-types','boq-items','expenditure-types'];
         foreach ($resources as $res) {
             $r->get("/{$res}", 'MasterDataController@index', $auth);
             $r->get("/{$res}/{id}", 'MasterDataController@show', $auth);

@@ -42,6 +42,7 @@ if ($rc !== 0) { fwrite(STDERR, "Seed failed:\n" . implode("\n", $out) . "\n"); 
 $db = Database::instance();
 const DEMO = 100200; const SUPER = 111111; const PW = 'Password123!';
 $projectId = (int)$db->fetchColumn('SELECT id FROM projects WHERE tenant_id = ? LIMIT 1', [DEMO]);
+$clientId = (int)$db->fetchColumn('SELECT id FROM clients WHERE tenant_id = ? LIMIT 1', [DEMO]);
 
 $auth = new AuthService();
 $users = new UserModel();
@@ -221,16 +222,40 @@ check('institution settings: GST/PAN/letterhead update + party GST/PAN persist',
     $noTax = (int)$db->fetchColumn("SELECT COUNT(*) FROM information_schema.columns WHERE table_schema=DATABASE() AND table_name='suppliers' AND column_name='tax_number'");
     return $client && $client['pan'] === 'HARBR5678K' && $sub && $sub['gst_number'] === '29STEEL9012L1Z8' && $noTax === 0;
 });
-check('construction stages: grand total + difference vs contract value', function () use ($projectId) {
+check('construction stages: per-record create/update/delete + totals', function () use ($projectId) {
     $svc = new \App\Services\ProjectService();
     $s = $svc->listStages(DEMO, $projectId);
-    // seed: 125000 + 200000 + 175000 = 500000; contract 500000 -> difference 0
-    if (abs($s['grand_total'] - 500000.00) > 0.01 || abs($s['difference'] - 0.00) > 0.01) return false;
-    $r = $svc->saveStages(DEMO, $projectId, [
-        ['phase_no' => 1, 'details' => 'Phase A', 'percentage' => 60, 'amount' => 300000],
-        ['phase_no' => 2, 'details' => 'Phase B', 'percentage' => 30, 'amount' => 150000],
-    ]);
-    return abs($r['grand_total'] - 450000.00) < 0.01 && abs($r['difference'] - 50000.00) < 0.01 && count($r['stages']) === 2;
+    if (abs($s['grand_total'] - 500000.00) > 0.01 || abs($s['difference'] - 0.00) > 0.01 || count($s['stages']) !== 3) return false;
+    $after = $svc->createStage(DEMO, $projectId, ['phase_no' => 4, 'details' => 'Extra', 'percentage' => 5, 'amount' => 25000]);
+    if (count($after['stages']) !== 4 || abs($after['difference'] - (-25000.00)) > 0.01) return false;
+    $newId = (int)$after['stages'][3]['id'];
+    $upd = $svc->updateStage(DEMO, $newId, ['amount' => 10000]);
+    if (abs($upd['grand_total'] - 510000.00) > 0.01) return false;
+    $del = $svc->deleteStage(DEMO, $newId);
+    return count($del['stages']) === 3 && abs($del['difference'] - 0.00) < 0.01;
+});
+check('expenditure: list joins party/type/project + total; CRUD', function () use ($projectId) {
+    $svc = new \App\Services\ExpenditureService();
+    $all = $svc->list(DEMO);
+    // seed: 42000 + 18000 + 6500 = 66500
+    if (abs($all['total'] - 66500.00) > 0.01) return false;
+    $proj = $svc->list(DEMO, ['scope' => 'project']);
+    $inst = $svc->list(DEMO, ['scope' => 'institutional']);
+    if (abs($proj['total'] - 60000.00) > 0.01 || abs($inst['total'] - 6500.00) > 0.01) return false;
+    $row = $svc->create(DEMO, null, ['scope' => 'project', 'project_id' => $projectId, 'party_type' => 'supplier', 'amount' => 1000, 'mode' => 'dd', 'expense_date' => '2026-05-01']);
+    $svc->update(DEMO, (int)$row['id'], ['scope' => 'project', 'project_id' => $projectId, 'amount' => 2000, 'expense_date' => '2026-05-01']);
+    $svc->delete(DEMO, (int)$row['id']);
+    return true;
+});
+check('income: GST computed; receipt data; cross-tenant blocked', function () use ($projectId, $clientId) {
+    $svc = new \App\Services\IncomeService();
+    $list = $svc->list(DEMO, $projectId);
+    if (abs($list['total'] - 118000.00) > 0.01) return false;   // 100000 + 18% GST
+    $r = $svc->create(DEMO, null, ['project_id' => $projectId, 'client_id' => $clientId, 'amount' => 50000, 'gst_percent' => 18, 'income_date' => '2026-05-05']);
+    if (abs((float)$r['gst_amount'] - 9000.00) > 0.01 || abs((float)$r['total_amount'] - 59000.00) > 0.01) return false;
+    if (empty($r['project_name'])) return false;                // receipt needs joined names
+    try { $svc->get(999001, (int)$r['id']); return false; }
+    catch (ServiceException $e) { return $e->code() === 'not_found'; }
 });
 check('project carries a currency (per-project)', function () use ($db, $projectId) {
     $sym = (string)$db->fetchColumn('SELECT currency_symbol FROM projects WHERE id=?', [$projectId]);

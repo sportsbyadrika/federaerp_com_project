@@ -330,32 +330,47 @@ final class ProjectService extends BaseService
         ];
     }
 
-    /** Replace the project's construction stages with the provided list. */
-    public function saveStages(int $tenantId, int $projectId, array $stages): array
+    /** Create a single construction stage. */
+    public function createStage(int $tenantId, int $projectId, array $s): array
     {
         $this->projects->findOrFail($projectId, $tenantId);
-        $db = Database::instance();
-        $db->beginTransaction();
-        try {
-            $db->execute('DELETE FROM construction_stages WHERE tenant_id = ? AND project_id = ?', [$tenantId, $projectId]);
-            $order = 0;
-            foreach ($stages as $s) {
-                $details = trim((string)($s['details'] ?? ''));
-                $amount = (float)($s['amount'] ?? 0);
-                if ($details === '' && $amount == 0.0) { continue; }
-                $this->stages->create([
-                    'tenant_id' => $tenantId, 'project_id' => $projectId,
-                    'phase_no' => (int)($s['phase_no'] ?? ($order + 1)),
-                    'details' => $details, 'percentage' => (float)($s['percentage'] ?? 0),
-                    'amount' => round($amount, 2), 'sort_order' => $order++,
-                ]);
-            }
-            $db->commit();
-        } catch (\Throwable $e) {
-            $db->rollBack();
-            throw $e;
-        }
+        $order = (int)Database::instance()->fetchColumn('SELECT COALESCE(MAX(sort_order),-1)+1 FROM construction_stages WHERE tenant_id=? AND project_id=?', [$tenantId, $projectId]);
+        $this->stages->create([
+            'tenant_id' => $tenantId, 'project_id' => $projectId,
+            'phase_no' => (int)($s['phase_no'] ?? ($order + 1)),
+            'details' => trim((string)($s['details'] ?? '')),
+            'percentage' => (float)($s['percentage'] ?? 0),
+            'amount' => round((float)($s['amount'] ?? 0), 2), 'sort_order' => $order,
+        ]);
         return $this->listStages($tenantId, $projectId);
+    }
+
+    public function updateStage(int $tenantId, int $stageId, array $s): array
+    {
+        $row = $this->stages->findOrFail($stageId, $tenantId);
+        $this->stages->update($stageId, $tenantId, [
+            'phase_no' => (int)($s['phase_no'] ?? $row['phase_no']),
+            'details' => array_key_exists('details', $s) ? trim((string)$s['details']) : $row['details'],
+            'percentage' => (float)($s['percentage'] ?? $row['percentage']),
+            'amount' => round((float)($s['amount'] ?? $row['amount']), 2),
+        ]);
+        return $this->listStages($tenantId, (int)$row['project_id']);
+    }
+
+    public function deleteStage(int $tenantId, int $stageId): array
+    {
+        $row = $this->stages->findOrFail($stageId, $tenantId);
+        $this->stages->delete($stageId, $tenantId);
+        return $this->listStages($tenantId, (int)$row['project_id']);
+    }
+
+    /** Flat task list for a project (used by expenditure dropdowns). */
+    public function projectTasks(int $tenantId, int $projectId): array
+    {
+        return Database::instance()->fetchAll(
+            'SELECT id, title FROM tasks WHERE tenant_id=:t AND project_id=:p AND deleted_at IS NULL ORDER BY sort_order, id',
+            [':t' => $tenantId, ':p' => $projectId]
+        );
     }
 
     // ---- Work progress logs ----------------------------------------------
