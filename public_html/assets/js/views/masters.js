@@ -78,6 +78,24 @@
                 { key: 'phone', label: 'Phone', type: 'text' },
             ],
         },
+        'subcontractors': {
+            label: 'Sub-contractors',
+            endpoint: '/api/subcontractors',
+            columns: [
+                { key: 'name', label: 'Name' },
+                { key: 'trade', label: 'Trade' },
+                { key: 'contact_person', label: 'Contact' },
+                { key: 'phone', label: 'Phone' },
+            ],
+            fields: [
+                { key: 'name', label: 'Name', type: 'text', required: true },
+                { key: 'trade', label: 'Trade', type: 'text', placeholder: 'e.g. Structural Steel' },
+                { key: 'contact_person', label: 'Contact person', type: 'text' },
+                { key: 'email', label: 'Email', type: 'email' },
+                { key: 'phone', label: 'Phone', type: 'text' },
+                { key: 'tax_number', label: 'Tax number', type: 'text' },
+            ],
+        },
         'materials': {
             label: 'Materials',
             endpoint: '/api/materials',
