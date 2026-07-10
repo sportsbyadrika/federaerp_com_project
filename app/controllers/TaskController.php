@@ -65,4 +65,54 @@ final class TaskController extends Controller
             Response::success(['message' => 'Task deleted']);
         });
     }
+
+    /** GET /api/projects/{id}/task-boq-options */
+    public function boqOptions(Request $request): void
+    {
+        $this->guard(fn() => Response::success($this->service->boqOptions((int)$request->tenantId(), (int)$request->param('id'))));
+    }
+
+    // ---- Per-task materials ----
+    public function materials(Request $request): void
+    {
+        $this->guard(fn() => Response::success($this->service->listMaterials((int)$request->tenantId(), (int)$request->param('id'))));
+    }
+
+    public function addMaterial(Request $request): void
+    {
+        $this->guard(fn() => Response::success($this->service->addMaterial((int)$request->tenantId(), (int)$request->param('id'), $this->uid($request), $request->all()), [], 201));
+    }
+
+    public function deleteMaterial(Request $request): void
+    {
+        $this->guard(function () use ($request) {
+            $this->service->deleteMaterial((int)$request->tenantId(), (int)$request->param('id'));
+            Response::success(['message' => 'Material removed']);
+        });
+    }
+
+    // ---- Per-task labour ----
+    public function labour(Request $request): void
+    {
+        $this->guard(fn() => Response::success($this->service->listLabour((int)$request->tenantId(), (int)$request->param('id'))));
+    }
+
+    public function addLabour(Request $request): void
+    {
+        $this->guard(fn() => Response::success($this->service->addLabour((int)$request->tenantId(), (int)$request->param('id'), $this->uid($request), $request->all()), [], 201));
+    }
+
+    public function deleteLabour(Request $request): void
+    {
+        $this->guard(function () use ($request) {
+            $this->service->deleteLabour((int)$request->tenantId(), (int)$request->param('id'));
+            Response::success(['message' => 'Labour removed']);
+        });
+    }
+
+    private function uid(Request $request): ?int
+    {
+        $u = $request->user();
+        return $u ? (int)$u['id'] : null;
+    }
 }

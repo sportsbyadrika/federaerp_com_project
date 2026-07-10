@@ -62,10 +62,18 @@ return function (Router $router, array $auth, array $write): void {
 
         // ---- Kanban tasks -------------------------------------------------
         $r->get('/projects/{id}/board', 'TaskController@board', $auth);
+        $r->get('/projects/{id}/task-boq-options', 'TaskController@boqOptions', $auth);
         $r->post('/tasks', 'TaskController@store', $write);
         $r->put('/tasks/{id}', 'TaskController@update', $write);
         $r->patch('/tasks/{id}/move', 'TaskController@move', $write);
         $r->delete('/tasks/{id}', 'TaskController@destroy', $write);
+        // Per-task materials + labour tracking.
+        $r->get('/tasks/{id}/materials', 'TaskController@materials', $auth);
+        $r->post('/tasks/{id}/materials', 'TaskController@addMaterial', $write);
+        $r->delete('/task-materials/{id}', 'TaskController@deleteMaterial', $write);
+        $r->get('/tasks/{id}/labour', 'TaskController@labour', $auth);
+        $r->post('/tasks/{id}/labour', 'TaskController@addLabour', $write);
+        $r->delete('/task-labour/{id}', 'TaskController@deleteLabour', $write);
 
         // ---- Billing & settlement -----------------------------------------
         $r->get('/projects/{id}/demand-notes', 'BillingController@demandNotes', $auth);

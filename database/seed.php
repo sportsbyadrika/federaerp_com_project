@@ -250,20 +250,30 @@ try {
         'percent_weight' => 35, 'certified_percent' => 0, 'status' => 'pending', 'sort_order' => 2,
     ]);
 
+    // [title, column, priority, milestone, sort, floor code, percentage]
     $tasks = [
-        ['Excavate site', 'Done', 'high', $ms1, 0],
-        ['Pour foundation', 'Done', 'high', $ms1, 1],
-        ['Erect columns', 'In Progress', 'high', $ms2, 0],
-        ['First-floor slab', 'In Progress', 'medium', $ms2, 1],
-        ['Inspect rebar', 'Review', 'urgent', $ms2, 0],
-        ['Order finishing materials', 'To Do', 'low', null, 0],
+        ['Excavate site', 'Done', 'high', $ms1, 0, 'GF', 10],
+        ['Pour foundation', 'Done', 'high', $ms1, 1, 'GF', 15],
+        ['Erect columns', 'In Progress', 'high', $ms2, 0, 'GF', 20],
+        ['First-floor slab', 'In Progress', 'medium', $ms2, 1, 'F1', 15],
+        ['Inspect rebar', 'Review', 'urgent', $ms2, 0, 'F1', 5],
+        ['Order finishing materials', 'To Do', 'low', null, 0, 'F2', 0],
     ];
-    foreach ($tasks as [$title, $col, $prio, $msId, $sort]) {
-        $db->insert('tasks', [
+    $firstTaskId = null;
+    foreach ($tasks as [$title, $col, $prio, $msId, $sort, $floorCode, $pct]) {
+        $tid = $db->insert('tasks', [
             'tenant_id' => DEMO_ORG, 'project_id' => $projectId, 'status_id' => $statusIds[$col],
-            'milestone_id' => $msId, 'title' => $title, 'assignee_id' => $superviserId,
+            'milestone_id' => $msId, 'title' => $title, 'item_head' => $title, 'assignee_id' => $superviserId,
+            'project_floor_id' => $floorIds[$floorCode] ?? null, 'percentage' => $pct,
             'priority' => $prio, 'due_date' => '2026-05-30', 'sort_order' => $sort,
         ]);
+        if ($firstTaskId === null) { $firstTaskId = $tid; }
+    }
+    // Sample per-task materials + labour so the kanban icons show data.
+    if ($firstTaskId) {
+        $db->insert('task_materials', ['tenant_id' => DEMO_ORG, 'task_id' => $firstTaskId, 'item_name' => 'Cement (OPC 53)', 'unit' => 'bag', 'quantity' => 60, 'used_date' => '2026-02-05']);
+        $db->insert('task_materials', ['tenant_id' => DEMO_ORG, 'task_id' => $firstTaskId, 'item_name' => 'River sand', 'unit' => 'cu.m', 'quantity' => 8, 'used_date' => '2026-02-05']);
+        $db->insert('task_labour', ['tenant_id' => DEMO_ORG, 'task_id' => $firstTaskId, 'worker_name' => 'Excavation crew', 'trade' => 'Earthwork', 'headcount' => 6, 'hours' => 8, 'work_date' => '2026-02-04']);
     }
 
     // ---- Billing: mobilization advance + invoices + receipts + retention --

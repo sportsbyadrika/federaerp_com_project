@@ -141,6 +141,41 @@ check('move rejects a status from another project/tenant', function () use ($db,
     try { $svc->move(DEMO, $taskId, 999999, 0); return false; }
     catch (ServiceException $e) { return $e->code() === 'unprocessable'; }
 });
+check('tasks: direct + from-BOQ create, floor swimlanes, materials & labour CRUD', function () use ($db, $projectId) {
+    $svc = new TaskService();
+    $todo = (int)$db->fetchColumn("SELECT id FROM task_statuses WHERE tenant_id=? AND project_id=? AND name='To Do'", [DEMO, $projectId]);
+    $floorId = (int)$db->fetchColumn('SELECT id FROM project_floors WHERE tenant_id=? AND project_id=? LIMIT 1', [DEMO, $projectId]);
+    // Direct task with floor + percentage; title derives from item_head when blank.
+    $direct = $svc->create(DEMO, ['project_id' => $projectId, 'status_id' => $todo, 'source' => 'direct',
+        'project_floor_id' => $floorId, 'item_code' => 'CIV-9', 'item_head' => 'Slab casting', 'percentage' => 25]);
+    if ($direct['title'] !== 'Slab casting' || (int)$direct['project_floor_id'] !== $floorId || (float)$direct['percentage'] !== 25.0) return false;
+    // From-BOQ task carries the entry link.
+    $entryId = (int)$db->fetchColumn('SELECT id FROM boq_entries WHERE tenant_id=? AND project_id=? LIMIT 1', [DEMO, $projectId]);
+    $boqTask = $svc->create(DEMO, ['project_id' => $projectId, 'status_id' => $todo, 'source' => 'boq',
+        'boq_entry_id' => $entryId, 'project_floor_id' => $floorId, 'item_head' => 'From BOQ', 'percentage' => 10]);
+    if ($boqTask['source'] !== 'boq' || (int)$boqTask['boq_entry_id'] !== $entryId) return false;
+    // Board exposes floor swimlanes + resource counts.
+    $board = $svc->board(DEMO, $projectId);
+    if (!isset($board['floors']) || !count($board['floors'])) return false;
+    // Materials CRUD
+    $tid = (int)$direct['id'];
+    $mat = $svc->addMaterial(DEMO, $tid, null, ['item_name' => 'Cement', 'unit' => 'bag', 'quantity' => 40]);
+    if ($mat['item_name'] !== 'Cement') return false;
+    if (count($svc->listMaterials(DEMO, $tid)) !== 1) return false;
+    $svc->deleteMaterial(DEMO, (int)$mat['id']);
+    if (count($svc->listMaterials(DEMO, $tid)) !== 0) return false;
+    // Labour CRUD
+    $lab = $svc->addLabour(DEMO, $tid, null, ['worker_name' => 'Mason team', 'trade' => 'Masonry', 'headcount' => 4, 'hours' => 8]);
+    if ((int)$lab['headcount'] !== 4) return false;
+    if (count($svc->listLabour(DEMO, $tid)) !== 1) return false;
+    $svc->deleteLabour(DEMO, (int)$lab['id']);
+    // Board count reflects materials/labour on a card (add one back)
+    $svc->addMaterial(DEMO, $tid, null, ['item_name' => 'Sand', 'unit' => 'cu.m', 'quantity' => 2]);
+    $board2 = $svc->board(DEMO, $projectId);
+    $found = false;
+    foreach ($board2['columns'] as $col) { foreach ($col['tasks'] as $t) { if ((int)$t['id'] === $tid && (int)$t['materials_count'] === 1) $found = true; } }
+    return $found;
+});
 
 fwrite(STDOUT, "\n[7] Secure storage / upload guards\n");
 check('path traversal is blocked', function () {
