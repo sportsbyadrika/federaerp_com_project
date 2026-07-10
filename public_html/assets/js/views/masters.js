@@ -47,6 +47,11 @@
             columns: [{ key: 'name', label: 'Unit' }],
             fields: [{ key: 'name', label: 'Unit name', type: 'text', required: true, placeholder: 'e.g. cu.m, sq.m, nos' }],
         },
+        'expenditure-types': {
+            label: 'Expenditure Types', endpoint: '/api/expenditure-types',
+            columns: [{ key: 'name', label: 'Type' }],
+            fields: [{ key: 'name', label: 'Type name', type: 'text', required: true, placeholder: 'e.g. Materials, Labour, Fuel' }],
+        },
         'currencies': {
             label: 'Currencies', endpoint: '/api/currencies',
             columns: [{ key: 'code', label: 'Code' }, { key: 'symbol', label: 'Symbol' }, { key: 'is_default', label: 'Default', boolean: true }],

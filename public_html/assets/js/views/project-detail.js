@@ -70,7 +70,7 @@
             }
             async function loadStages() {
                 const s = (await api.get('/api/projects/' + id.value + '/stages')).data;
-                stages.value = s.stages.map(x => ({ phase_no: +x.phase_no, details: x.details, percentage: +x.percentage, amount: +x.amount }));
+                stages.value = s.stages.map(x => ({ id: x.id, phase_no: +x.phase_no, details: x.details, percentage: +x.percentage, amount: +x.amount }));
             }
             onMounted(load);
             watch(id, load);
@@ -147,22 +147,43 @@
                 try { await api.del('/api/boq-entries/' + entry.id); CSApp.flash('success', 'Deleted'); await loadBoq(); } catch (e) { CSApp.flash('error', e.message); }
             }
 
-            // ---- Construction stages ----
-            function addStage() { stages.value.push({ phase_no: stages.value.length + 1, details: '', percentage: 0, amount: 0 }); }
-            function removeStage(i) { stages.value.splice(i, 1); }
+            // ---- Construction stages (modal-based add/edit) ----
             const stagesGrand = computed(() => stages.value.reduce((s, r) => s + (+r.amount || 0), 0));
             const stagesDiff = computed(() => (+project.contract_value || 0) - stagesGrand.value);
-            async function saveStages() {
+            const showStageModal = ref(false);
+            const editingStageId = ref(null);
+            const stageForm = reactive({ phase_no: 1, details: '', percentage: 0, amount: 0 });
+            function openStageAdd() {
+                editingStageId.value = null;
+                Object.assign(stageForm, { phase_no: stages.value.length + 1, details: '', percentage: 0, amount: 0 });
+                showStageModal.value = true;
+            }
+            function openStageEdit(s) {
+                editingStageId.value = s.id;
+                Object.assign(stageForm, { phase_no: s.phase_no, details: s.details, percentage: s.percentage, amount: s.amount });
+                showStageModal.value = true;
+            }
+            async function saveStage() {
+                if (!stageForm.details) { CSApp.flash('error', 'Details are required'); return; }
                 saving.value = true;
-                try { await api.post('/api/projects/' + id.value + '/stages', { stages: stages.value }); CSApp.flash('success', 'Construction stages saved'); await loadStages(); }
-                catch (e) { CSApp.flash('error', e.message); }
+                try {
+                    const payload = { phase_no: +stageForm.phase_no || 0, details: stageForm.details, percentage: +stageForm.percentage || 0, amount: +stageForm.amount || 0 };
+                    if (editingStageId.value) await api.put('/api/stages/' + editingStageId.value, payload);
+                    else await api.post('/api/projects/' + id.value + '/stages', payload);
+                    CSApp.flash('success', 'Stage saved'); showStageModal.value = false; await loadStages();
+                } catch (e) { CSApp.flash('error', e.message); }
                 finally { saving.value = false; }
+            }
+            async function deleteStage(s) {
+                if (!confirm('Delete phase ' + s.phase_no + '?')) return;
+                try { await api.del('/api/stages/' + s.id); CSApp.flash('success', 'Deleted'); await loadStages(); }
+                catch (e) { CSApp.flash('error', e.message); }
             }
 
             return { FLOOR_CATALOG, id, tab, loading, saving, project, clients, currencies, floors, selectedCodes, entries, boqTotal,
                 masterItems, stages, nf, pmoney, lineSum, onCurrencyChange, saveDetails, saveFloors,
                 showModal, editingId, form, modalLines, modalRowAmount, modalTotal, openAdd, openEdit, onPickMaster, saveEntry, deleteEntry,
-                addStage, removeStage, stagesGrand, stagesDiff, saveStages };
+                stagesGrand, stagesDiff, showStageModal, editingStageId, stageForm, openStageAdd, openStageEdit, saveStage, deleteStage };
         },
         template: `
         <div v-if="loading" class="text-slate-400 text-sm py-10 text-center">Loading project…</div>
@@ -266,26 +287,29 @@
                 </div>
             </div>
 
-            <!-- CONSTRUCTION STAGES -->
+            <!-- CONSTRUCTION STAGES (table + modal add/edit) -->
             <div v-if="tab==='stages'" class="bg-white rounded-xl border border-slate-200 p-6">
                 <div class="flex items-center justify-between mb-3">
                     <h2 class="font-medium text-slate-700">Construction Stages</h2>
-                    <button @click="addStage" class="px-3 py-1.5 text-sm rounded-lg border border-slate-300 text-slate-600 hover:bg-slate-50">+ Add stage</button>
+                    <button @click="openStageAdd" class="px-3 py-2 text-sm rounded-lg bg-brand text-white hover:bg-brand-dark">+ Add stage</button>
                 </div>
                 <div class="table-scroll">
                     <table class="w-full text-sm">
                         <thead><tr class="text-left text-slate-400 border-b border-slate-100">
-                            <th class="py-2 pr-2 w-24">Phase No.</th><th class="py-2 pr-2">Details</th><th class="py-2 pr-2 text-right w-28">Percentage</th><th class="py-2 pr-2 text-right w-40">Amount</th><th class="w-8"></th>
+                            <th class="py-2 pr-2 w-24">Phase No.</th><th class="py-2 pr-2">Details</th><th class="py-2 pr-2 text-right w-28">Percentage</th><th class="py-2 pr-2 text-right w-40">Amount</th><th class="py-2 pr-2 text-right w-28"></th>
                         </tr></thead>
                         <tbody>
-                            <tr v-for="(s,i) in stages" :key="i" class="border-b border-slate-50">
-                                <td class="py-1.5 pr-2"><input v-model.number="s.phase_no" type="number" class="rounded border border-slate-200 px-2 py-1 text-xs w-20"></td>
-                                <td class="py-1.5 pr-2"><input v-model="s.details" class="rounded border border-slate-200 px-2 py-1 text-xs w-full"></td>
-                                <td class="py-1.5 pr-2 text-right"><input v-model.number="s.percentage" type="number" step="0.01" class="rounded border border-slate-200 px-2 py-1 text-xs w-24 text-right"> %</td>
-                                <td class="py-1.5 pr-2 text-right"><input v-model.number="s.amount" type="number" step="0.01" class="rounded border border-slate-200 px-2 py-1 text-xs w-36 text-right"></td>
-                                <td class="py-1.5 text-right"><button @click="removeStage(i)" class="text-rose-400 hover:text-rose-600">✕</button></td>
+                            <tr v-for="s in stages" :key="s.id" class="border-b border-slate-50">
+                                <td class="py-2 pr-2 text-slate-700">{{ s.phase_no }}</td>
+                                <td class="py-2 pr-2 text-slate-700">{{ s.details }}</td>
+                                <td class="py-2 pr-2 text-right text-slate-600">{{ nf(s.percentage) }}%</td>
+                                <td class="py-2 pr-2 text-right text-slate-700">{{ pmoney(s.amount) }}</td>
+                                <td class="py-2 pr-2 text-right whitespace-nowrap">
+                                    <button @click="openStageEdit(s)" class="text-brand hover:underline text-xs mr-2">Edit</button>
+                                    <button @click="deleteStage(s)" class="text-rose-400 hover:text-rose-600 text-xs">Delete</button>
+                                </td>
                             </tr>
-                            <tr v-if="!stages.length"><td colspan="5" class="py-6 text-center text-slate-400">No stages — add one.</td></tr>
+                            <tr v-if="!stages.length"><td colspan="5" class="py-6 text-center text-slate-400">No stages — click “+ Add stage”.</td></tr>
                         </tbody>
                         <tfoot>
                             <tr class="border-t border-slate-200 font-medium">
@@ -303,7 +327,28 @@
                         </tfoot>
                     </table>
                 </div>
-                <div class="mt-4"><button @click="saveStages" :disabled="saving" class="px-4 py-2 text-sm rounded-lg bg-brand text-white hover:bg-brand-dark disabled:opacity-60">{{ saving ? 'Saving…' : 'Save stages' }}</button></div>
+            </div>
+
+            <!-- Construction stage Add/Edit modal -->
+            <div v-if="showStageModal" class="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 px-4 py-6 overflow-y-auto print:hidden">
+                <div class="w-full max-w-lg bg-white rounded-xl shadow-xl p-6 my-auto">
+                    <div class="flex items-center justify-between mb-4">
+                        <h2 class="font-semibold text-slate-800">{{ editingStageId ? 'Edit stage' : 'Add stage' }}</h2>
+                        <button @click="showStageModal=false" class="text-slate-400">✕</button>
+                    </div>
+                    <div class="space-y-3">
+                        <div class="grid grid-cols-2 gap-3">
+                            <div><label class="block text-xs text-slate-500 mb-1">Phase No.</label><input v-model.number="stageForm.phase_no" type="number" class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"></div>
+                            <div><label class="block text-xs text-slate-500 mb-1">Percentage (%)</label><input v-model.number="stageForm.percentage" type="number" step="0.01" class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"></div>
+                        </div>
+                        <div><label class="block text-xs text-slate-500 mb-1">Details</label><textarea v-model="stageForm.details" rows="2" class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-brand/40 focus:border-brand"></textarea></div>
+                        <div><label class="block text-xs text-slate-500 mb-1">Amount</label><input v-model.number="stageForm.amount" type="number" step="0.01" class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"></div>
+                    </div>
+                    <div class="flex justify-end gap-2 mt-5">
+                        <button @click="showStageModal=false" class="px-4 py-2 text-sm rounded-lg border border-slate-300 text-slate-600">Cancel</button>
+                        <button @click="saveStage" :disabled="saving" class="px-4 py-2 text-sm rounded-lg bg-brand text-white hover:bg-brand-dark disabled:opacity-60">{{ saving ? 'Saving…' : 'Save stage' }}</button>
+                    </div>
+                </div>
             </div>
 
             <!-- BOQ Add/Edit modal (wide) -->
