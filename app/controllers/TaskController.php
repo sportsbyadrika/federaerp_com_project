@@ -29,9 +29,13 @@ final class TaskController extends Controller
         $data = $this->validate($request, [
             'project_id' => 'required|integer',
             'status_id'  => 'required|integer',
-            'title'      => 'required|string|max:200',
         ]);
         if ($data === null) return;
+        // A card needs either a title or an item head (service derives the title).
+        if (trim((string)$request->input('title', '')) === '' && trim((string)$request->input('item_head', '')) === '') {
+            $this->fail('validation', 'A title or item head is required', 422);
+            return;
+        }
         $this->guard(fn() => Response::success($this->service->create((int)$request->tenantId(), $request->all()), [], 201));
     }
 
