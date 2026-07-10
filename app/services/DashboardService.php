@@ -31,8 +31,9 @@ final class DashboardService extends BaseService
         $db = Database::instance();
         $p = [':t' => $tenantId];
 
-        $income = (float)$db->fetchColumn("SELECT COALESCE(SUM(amount),0) FROM transactions WHERE tenant_id=:t AND txn_type='income'", $p);
-        $expense = (float)$db->fetchColumn("SELECT COALESCE(SUM(amount),0) FROM transactions WHERE tenant_id=:t AND txn_type='expense'", $p);
+        // Income + expenditure come from the dedicated modules (source of truth).
+        $income = (float)$db->fetchColumn("SELECT COALESCE(SUM(total_amount),0) FROM incomes WHERE tenant_id=:t", $p);
+        $expense = (float)$db->fetchColumn("SELECT COALESCE(SUM(amount),0) FROM expenditures WHERE tenant_id=:t", $p);
 
         $org = $db->fetch(
             "SELECT id, name, legal_name, email, phone, address, city, country, currency, created_at
@@ -47,7 +48,7 @@ final class DashboardService extends BaseService
                 'active' => (int)$db->fetchColumn("SELECT COUNT(*) FROM projects WHERE tenant_id=:t AND status='active' AND deleted_at IS NULL", $p),
             ],
             'weekly_progress' => $db->fetchAll(
-                "SELECT id, name, code, progress_percent, status FROM projects
+                "SELECT id, name, code, project_type, progress_percent, status FROM projects
                   WHERE tenant_id=:t AND deleted_at IS NULL ORDER BY progress_percent DESC LIMIT 6", $p
             ),
             'fleet' => [
