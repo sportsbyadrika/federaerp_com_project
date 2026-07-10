@@ -20,8 +20,9 @@
             const raPreview = ref(null);
             const loading = ref(true);
 
-            const receipt = reactive({ invoice_id: null, amount: 0, method: 'bank_transfer', reference: '' });
+            const receipt = reactive({ invoice_id: null, amount: 0, method: 'bank_transfer', reference: '', payment_date: new Date().toISOString().slice(0, 10) });
             const raForm = reactive({ work_order_id: null, certified_percent: 0 });
+            const newDN = reactive({ amount: 0, note_type: 'standard', due_date: '', description: '' });
 
             const fmt = (n) => new Intl.NumberFormat(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(n || 0);
 
@@ -55,8 +56,21 @@
             async function recordReceipt() {
                 if (!receipt.amount) { CSApp.flash('error', 'Enter an amount'); return; }
                 try {
-                    await api.post('/api/receipts', { project_id: activeId.value, ...receipt });
-                    CSApp.flash('success', 'Receipt recorded'); receipt.amount = 0;
+                    const payload = { project_id: activeId.value, ...receipt };
+                    if (!payload.payment_date) delete payload.payment_date;
+                    await api.post('/api/receipts', payload);
+                    CSApp.flash('success', 'Receipt recorded'); receipt.amount = 0; receipt.reference = '';
+                    await loadAll();
+                } catch (e) { CSApp.flash('error', e.message); }
+            }
+            async function createDemandNote() {
+                if (!newDN.amount || newDN.amount <= 0) { CSApp.flash('error', 'Enter a demand amount'); return; }
+                try {
+                    const payload = { project_id: activeId.value, amount: newDN.amount, note_type: newDN.note_type, description: newDN.description };
+                    if (newDN.due_date) payload.due_date = newDN.due_date;
+                    await api.post('/api/demand-notes', payload);
+                    CSApp.flash('success', 'Demand note created');
+                    Object.assign(newDN, { amount: 0, note_type: 'standard', due_date: '', description: '' });
                     await loadAll();
                 } catch (e) { CSApp.flash('error', e.message); }
             }
@@ -73,7 +87,7 @@
                 } catch (e) { CSApp.flash('error', e.message); }
             }
 
-            return { projects, activeId, tab, demandNotes, invoices, settlement, workOrders, raPreview, loading, receipt, raForm, fmt, generateInvoice, recordReceipt, previewRa, generateRa };
+            return { projects, activeId, tab, demandNotes, invoices, settlement, workOrders, raPreview, loading, receipt, raForm, newDN, fmt, generateInvoice, recordReceipt, createDemandNote, previewRa, generateRa };
         },
         template: `
         <div>
@@ -95,13 +109,42 @@
             <div v-else-if="tab==='invoices'" class="grid grid-cols-1 lg:grid-cols-3 gap-6">
                 <div class="lg:col-span-2 space-y-4">
                     <div class="bg-white rounded-xl border border-slate-200 p-5">
-                        <h2 class="font-medium text-slate-700 mb-3">Demand notes</h2>
+                        <h2 class="font-medium text-slate-700 mb-3">Demand notes <span class="text-xs font-normal text-slate-400">(payment requests)</span></h2>
                         <div v-for="dn in demandNotes" :key="dn.id" class="flex items-center justify-between py-2 border-b border-slate-50 text-sm">
                             <div><span class="text-slate-700">{{ dn.reference }}</span> <span class="text-slate-400">· {{ fmt(dn.amount) }} · {{ dn.note_type }}</span></div>
                             <button v-if="dn.status!=='invoiced'" @click="generateInvoice(dn)" class="text-xs px-2 py-1 rounded bg-brand text-white">Generate invoice</button>
                             <span v-else class="text-xs text-emerald-600">Invoiced</span>
                         </div>
-                        <p v-if="!demandNotes.length" class="text-sm text-slate-400 py-3 text-center">No demand notes</p>
+                        <p v-if="!demandNotes.length" class="text-sm text-slate-400 py-3 text-center">No demand notes yet — add one below.</p>
+
+                        <!-- New demand note -->
+                        <div class="mt-4 pt-4 border-t border-slate-100">
+                            <h3 class="text-sm font-medium text-slate-600 mb-2">New demand note</h3>
+                            <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                                <div>
+                                    <label class="block text-xs text-slate-500 mb-1">Amount</label>
+                                    <input v-model.number="newDN.amount" type="number" step="0.01" min="0" class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-brand/40 focus:border-brand">
+                                </div>
+                                <div>
+                                    <label class="block text-xs text-slate-500 mb-1">Type</label>
+                                    <select v-model="newDN.note_type" class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm">
+                                        <option value="standard">Standard</option>
+                                        <option value="mobilization_advance">Mobilization advance</option>
+                                        <option value="milestone">Milestone</option>
+                                        <option value="retention_release">Retention release</option>
+                                    </select>
+                                </div>
+                                <div>
+                                    <label class="block text-xs text-slate-500 mb-1">Due date</label>
+                                    <input v-model="newDN.due_date" type="date" class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm">
+                                </div>
+                                <div>
+                                    <label class="block text-xs text-slate-500 mb-1">Description</label>
+                                    <input v-model="newDN.description" type="text" placeholder="e.g. Foundation milestone" class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm">
+                                </div>
+                            </div>
+                            <button @click="createDemandNote" class="mt-3 px-3 py-2 text-sm rounded-lg bg-brand text-white hover:bg-brand-dark">+ Create demand note</button>
+                        </div>
                     </div>
                     <div class="bg-white rounded-xl border border-slate-200 p-5">
                         <h2 class="font-medium text-slate-700 mb-3">Invoices</h2>
@@ -123,10 +166,35 @@
                 <div class="bg-white rounded-xl border border-slate-200 p-5 h-fit">
                     <h2 class="font-medium text-slate-700 mb-3">Record payment receipt</h2>
                     <div class="space-y-3">
-                        <select v-model="receipt.invoice_id" class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"><option :value="null">Unlinked / advance</option><option v-for="inv in invoices" :key="inv.id" :value="inv.id">{{ inv.invoice_number }} ({{ fmt(inv.net_payable) }})</option></select>
-                        <input v-model.number="receipt.amount" type="number" step="0.01" placeholder="Amount" class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm">
-                        <select v-model="receipt.method" class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"><option value="bank_transfer">Bank transfer</option><option value="cash">Cash</option><option value="cheque">Cheque</option><option value="card">Card</option></select>
-                        <input v-model="receipt.reference" placeholder="Reference" class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm">
+                        <div>
+                            <label class="block text-sm text-slate-600 mb-1">Against invoice</label>
+                            <select v-model="receipt.invoice_id" class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm">
+                                <option :value="null">Unlinked / advance</option>
+                                <option v-for="inv in invoices" :key="inv.id" :value="inv.id">{{ inv.invoice_number }} ({{ fmt(inv.net_payable) }})</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label class="block text-sm text-slate-600 mb-1">Amount received</label>
+                            <input v-model.number="receipt.amount" type="number" step="0.01" min="0" placeholder="0.00" class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-brand/40 focus:border-brand">
+                        </div>
+                        <div>
+                            <label class="block text-sm text-slate-600 mb-1">Payment date</label>
+                            <input v-model="receipt.payment_date" type="date" class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm">
+                        </div>
+                        <div>
+                            <label class="block text-sm text-slate-600 mb-1">Payment method</label>
+                            <select v-model="receipt.method" class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm">
+                                <option value="bank_transfer">Bank transfer</option>
+                                <option value="cash">Cash</option>
+                                <option value="cheque">Cheque</option>
+                                <option value="card">Card</option>
+                                <option value="other">Other</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label class="block text-sm text-slate-600 mb-1">Reference / txn no.</label>
+                            <input v-model="receipt.reference" type="text" placeholder="e.g. NEFT-88213" class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-brand/40 focus:border-brand">
+                        </div>
                         <button @click="recordReceipt" class="w-full py-2 rounded-lg bg-brand text-white text-sm hover:bg-brand-dark">Record receipt</button>
                     </div>
                 </div>

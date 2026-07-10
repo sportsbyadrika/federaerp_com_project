@@ -227,6 +227,7 @@
                     { label: 'Billing', href: '#/billing' },
                     { label: 'Documents', href: '#/documents' },
                     { label: 'Reports', href: '#/reports' },
+                    { label: 'Setup', href: '#/setup' },
                 ];
             });
 
