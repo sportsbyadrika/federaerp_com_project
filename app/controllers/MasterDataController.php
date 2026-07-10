@@ -20,12 +20,12 @@ final class MasterDataController extends Controller
     private const RESOURCES = [
         'clients' => [
             'table' => 'clients', 'soft' => true,
-            'fillable' => ['tenant_id','name','contact_person','email','phone','address','notes'],
+            'fillable' => ['tenant_id','name','contact_person','email','phone','gst_number','pan','address','notes'],
             'required' => ['name' => 'required|string|max:160'],
         ],
         'suppliers' => [
             'table' => 'suppliers', 'soft' => true,
-            'fillable' => ['tenant_id','name','contact_person','email','phone','address','tax_number','rating'],
+            'fillable' => ['tenant_id','name','contact_person','email','phone','gst_number','pan','address','rating'],
             'required' => ['name' => 'required|string|max:160'],
         ],
         'construction-models' => [
@@ -56,7 +56,7 @@ final class MasterDataController extends Controller
         ],
         'subcontractors' => [
             'table' => 'subcontractors', 'soft' => true,
-            'fillable' => ['tenant_id','name','trade','contact_person','email','phone','tax_number'],
+            'fillable' => ['tenant_id','name','trade','contact_person','email','phone','gst_number','pan'],
             'required' => ['name' => 'required|string|max:160'],
         ],
         'vehicles' => [
