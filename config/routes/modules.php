@@ -145,6 +145,7 @@ return function (Router $router, array $auth, array $write): void {
         $r->get('/settings', 'CurrencyController@settings', $auth);
         $r->get('/currencies', 'CurrencyController@index', $auth);
         $r->post('/currencies', 'CurrencyController@store', $write);
+        $r->put('/currencies/{id}', 'CurrencyController@update', $write);
         $r->post('/currencies/{id}/default', 'CurrencyController@setDefault', $write);
         $r->delete('/currencies/{id}', 'CurrencyController@destroy', $write);
 

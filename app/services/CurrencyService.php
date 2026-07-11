@@ -61,6 +61,40 @@ final class CurrencyService extends BaseService
         return $this->currencies->findOrFail($id, $tenantId);
     }
 
+    public function update(int $tenantId, int $id, array $input): array
+    {
+        $row = $this->currencies->findOrFail($id, $tenantId);
+        $code = strtoupper(trim((string)($input['code'] ?? $row['code'])));
+        $symbol = trim((string)($input['symbol'] ?? $row['symbol']));
+        if ($code === '' || $symbol === '') {
+            throw ServiceException::unprocessable('Currency code and symbol are required');
+        }
+        // Code must stay unique within the tenant (excluding this row).
+        $clash = Database::instance()->fetchColumn(
+            'SELECT COUNT(*) FROM currencies WHERE tenant_id = :t AND code = :c AND id <> :id',
+            [':t' => $tenantId, ':c' => $code, ':id' => $id]
+        );
+        if ((int)$clash > 0) {
+            throw ServiceException::conflict('That currency code already exists');
+        }
+        $makeDefault = !empty($input['is_default']);
+
+        $db = Database::instance();
+        $db->beginTransaction();
+        try {
+            $this->currencies->update($id, $tenantId, ['code' => $code, 'symbol' => $symbol]);
+            // Keep the org mirror in sync when editing the default (or setting it).
+            if ($makeDefault || (int)$row['is_default'] === 1) {
+                $this->applyDefault($tenantId, $id, $code, $symbol);
+            }
+            $db->commit();
+        } catch (\Throwable $e) {
+            $db->rollBack();
+            throw $e;
+        }
+        return $this->currencies->findOrFail($id, $tenantId);
+    }
+
     public function setDefault(int $tenantId, int $id): array
     {
         $row = $this->currencies->findOrFail($id, $tenantId);

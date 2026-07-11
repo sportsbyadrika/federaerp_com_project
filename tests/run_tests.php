@@ -304,9 +304,12 @@ check('currency: default is set and mirrored to the organisation', function () u
     $svc = new \App\Services\CurrencyService();
     $def = $svc->default(DEMO);
     if ($def['code'] !== 'INR' || $def['symbol'] !== '₹') return false;
-    $svc->create(DEMO, ['code' => 'EUR', 'symbol' => '€', 'is_default' => true]);
+    $eur = $svc->create(DEMO, ['code' => 'EUR', 'symbol' => '€', 'is_default' => true]);
     $now = $svc->default(DEMO);
-    return $now['code'] === 'EUR' && (string)$db->fetchColumn('SELECT currency_symbol FROM organisations WHERE id=?', [DEMO]) === '€';
+    if ($now['code'] !== 'EUR' || (string)$db->fetchColumn('SELECT currency_symbol FROM organisations WHERE id=?', [DEMO]) !== '€') return false;
+    // Editing the default currency's symbol mirrors onto the organisation.
+    $svc->update(DEMO, (int)$eur['id'], ['code' => 'EUR', 'symbol' => 'EU']);
+    return $svc->default(DEMO)['symbol'] === 'EU';
 });
 
 fwrite(STDOUT, "\n[11] Staff master + dashboard task-based progress\n");

@@ -35,6 +35,11 @@ final class CurrencyController extends Controller
         $this->guard(fn() => Response::success($this->service->create((int)$request->tenantId(), $request->all()), [], 201));
     }
 
+    public function update(Request $request): void
+    {
+        $this->guard(fn() => Response::success($this->service->update((int)$request->tenantId(), (int)$request->param('id'), $request->all())));
+    }
+
     public function setDefault(Request $request): void
     {
         $this->guard(fn() => Response::success($this->service->setDefault((int)$request->tenantId(), (int)$request->param('id'))));
