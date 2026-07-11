@@ -113,6 +113,7 @@
             const form = reactive({});
             const filterValue = ref('');
             const dynOptions = reactive({}); // endpoint -> [rows]
+            const editingId = ref(null);
 
             function def() { return RESOURCES[active.value]; }
 
@@ -130,10 +131,20 @@
             }
 
             function resetForm() {
+                editingId.value = null;
                 Object.keys(form).forEach(k => delete form[k]);
                 const d = def();
                 d.fields.forEach(f => { form[f.key] = (d.defaults && d.defaults[f.key] !== undefined) ? d.defaults[f.key] : (f.type === 'checkbox' ? false : ''); });
             }
+            function startEdit(row) {
+                editingId.value = row.id;
+                const d = def();
+                d.fields.forEach(f => {
+                    const v = row[f.key];
+                    form[f.key] = f.type === 'checkbox' ? (+v === 1) : (v === null || v === undefined ? '' : v);
+                });
+            }
+            function cancelEdit() { resetForm(); }
             async function load() {
                 loading.value = true; rows.value = [];
                 try {
@@ -153,9 +164,19 @@
                 saving.value = true;
                 try {
                     const payload = {};
-                    d.fields.forEach(f => { if (form[f.key] !== '' && form[f.key] !== null && form[f.key] !== undefined) payload[f.key] = f.type === 'checkbox' ? (form[f.key] ? 1 : 0) : form[f.key]; });
-                    await api.post(d.endpoint, payload);
-                    CSApp.flash('success', d.label.replace(/s$/, '') + ' added');
+                    d.fields.forEach(f => {
+                        if (f.type === 'checkbox') { payload[f.key] = form[f.key] ? 1 : 0; return; }
+                        if (form[f.key] !== '' && form[f.key] !== null && form[f.key] !== undefined) payload[f.key] = form[f.key];
+                        else if (editingId.value) payload[f.key] = null; // allow clearing on edit
+                    });
+                    const label = d.label.replace(/s$/, '');
+                    if (editingId.value) {
+                        await api.put(d.endpoint + '/' + editingId.value, payload);
+                        CSApp.flash('success', label + ' updated');
+                    } else {
+                        await api.post(d.endpoint, payload);
+                        CSApp.flash('success', label + ' added');
+                    }
                     resetForm(); await load();
                     if (active.value === 'currencies') CSApp.loadCurrency();
                 } catch (e) { CSApp.flash('error', e.message); }
@@ -172,7 +193,7 @@
             }
 
             onMounted(async () => { resetForm(); await ensureDynOptions(); load(); });
-            return { RESOURCES, keys, active, rows, loading, saving, form, filterValue, def, selectTab, save, remove, post, optionsFor };
+            return { RESOURCES, keys, active, rows, loading, saving, form, filterValue, editingId, def, selectTab, save, remove, post, optionsFor, startEdit, cancelEdit };
         },
         template: `
         <div>
@@ -190,8 +211,8 @@
 
             <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
                 <!-- Add form -->
-                <div class="bg-white rounded-xl border border-slate-200 p-5 h-fit">
-                    <h2 class="font-medium text-slate-700 mb-3">Add {{ def().label.replace(/s$/,'') }}</h2>
+                <div class="bg-white rounded-xl border border-slate-200 p-5 h-fit" :class="editingId ? 'ring-2 ring-brand/40' : ''">
+                    <h2 class="font-medium text-slate-700 mb-3">{{ editingId ? 'Edit' : 'Add' }} {{ def().label.replace(/s$/,'') }}</h2>
                     <div class="space-y-3">
                         <div v-for="f in def().fields" :key="f.key">
                             <label v-if="f.type!=='checkbox'" class="block text-sm text-slate-600 mb-1">{{ f.label }}<span v-if="f.required" class="text-rose-500"> *</span></label>
@@ -203,7 +224,10 @@
                             <input v-else v-model="form[f.key]" :type="f.type==='number'?'number':(f.type==='email'?'email':'text')" :step="f.type==='number'?'any':null" :placeholder="f.placeholder||''"
                                    class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-brand/40 focus:border-brand">
                         </div>
-                        <button @click="save" :disabled="saving" class="w-full py-2 rounded-lg bg-brand text-white text-sm hover:bg-brand-dark disabled:opacity-60">{{ saving ? 'Saving…' : '+ Add' }}</button>
+                        <div class="flex gap-2">
+                            <button @click="save" :disabled="saving" class="flex-1 py-2 rounded-lg bg-brand text-white text-sm hover:bg-brand-dark disabled:opacity-60">{{ saving ? 'Saving…' : (editingId ? 'Save changes' : '+ Add') }}</button>
+                            <button v-if="editingId" @click="cancelEdit" class="px-3 py-2 rounded-lg border border-slate-300 text-slate-600 text-sm hover:bg-slate-50">Cancel</button>
+                        </div>
                     </div>
                 </div>
 
@@ -235,6 +259,7 @@
                                         <template v-for="a in (def().rowActions||[])" :key="a.label">
                                             <button v-if="!a.hideWhen || !a.hideWhen(row)" @click="a.call(row, { def, post })" class="text-brand hover:underline text-xs mr-2">{{ a.label }}</button>
                                         </template>
+                                        <button @click="startEdit(row)" class="text-brand hover:underline text-xs mr-2">Edit</button>
                                         <button @click="remove(row)" class="text-rose-400 hover:text-rose-600 text-xs">Delete</button>
                                     </td>
                                 </tr>
