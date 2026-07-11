@@ -169,6 +169,10 @@ check('tasks: direct + from-BOQ create, floor swimlanes, materials & labour CRUD
     if ((int)$lab['headcount'] !== 4) return false;
     if (count($svc->listLabour(DEMO, $tid)) !== 1) return false;
     $svc->deleteLabour(DEMO, (int)$lab['id']);
+    // A blank date string must be stored as NULL (MySQL strict mode rejects '').
+    $blankDate = $svc->addMaterial(DEMO, $tid, null, ['item_name' => 'Gravel', 'unit' => 'cu.m', 'quantity' => 1, 'used_date' => '']);
+    if ($blankDate['used_date'] !== null) return false;
+    $svc->deleteMaterial(DEMO, (int)$blankDate['id']);
     // Board count reflects materials/labour on a card (add one back)
     $svc->addMaterial(DEMO, $tid, null, ['item_name' => 'Sand', 'unit' => 'cu.m', 'quantity' => 2]);
     $board2 = $svc->board(DEMO, $projectId);

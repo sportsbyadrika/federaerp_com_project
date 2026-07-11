@@ -255,11 +255,18 @@ final class TaskService extends BaseService
             'item_name'   => $name,
             'unit'        => $in['unit'] ?? null,
             'quantity'    => round((float)($in['quantity'] ?? 0), 3),
-            'used_date'   => $in['used_date'] ?? null,
+            'used_date'   => $this->nullableDate($in['used_date'] ?? null),
             'notes'       => $in['notes'] ?? null,
             'created_by'  => $userId,
         ]);
         return $this->taskMaterials->findOrFail($id, $tenantId);
+    }
+
+    /** Normalise blank date strings to NULL (MySQL strict mode rejects ''). */
+    private function nullableDate($value): ?string
+    {
+        $v = trim((string)($value ?? ''));
+        return $v === '' ? null : $v;
     }
 
     public function deleteMaterial(int $tenantId, int $id): void
@@ -298,7 +305,7 @@ final class TaskService extends BaseService
             'trade'       => $trade,
             'headcount'   => max(1, (int)($in['headcount'] ?? 1)),
             'hours'       => round((float)($in['hours'] ?? 0), 2),
-            'work_date'   => $in['work_date'] ?? null,
+            'work_date'   => $this->nullableDate($in['work_date'] ?? null),
             'notes'       => $in['notes'] ?? null,
             'created_by'  => $userId,
         ]);
