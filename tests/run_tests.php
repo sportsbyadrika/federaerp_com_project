@@ -328,6 +328,26 @@ check('staff: tenant-scoped CRUD via master resource', function () use ($db) {
     try { $m->findOrFail($id, DEMO); return false; } catch (ServiceException $e) { /* soft-deleted */ }
     try { $m->findOrFail(999999, DEMO); return false; } catch (ServiceException $e) { return $e->code() === 'not_found'; }
 });
+check('projects: financial summary rolls up income/expense per project + totals', function () use ($db, $projectId) {
+    $svc = new \App\Services\ProjectService();
+    $sum = $svc->financialSummary(DEMO);
+    if (!isset($sum['projects'], $sum['totals'])) return false;
+    $row = null;
+    foreach ($sum['projects'] as $r) { if ((int)$r['id'] === $projectId) { $row = $r; break; } }
+    if ($row === null) return false;
+    // Match the rollup against direct DB sums for this project.
+    $expBaseDb = (float)$db->fetchColumn('SELECT COALESCE(SUM(amount),0) FROM expenditures WHERE tenant_id=? AND project_id=?', [DEMO, $projectId]);
+    $incBaseDb = (float)$db->fetchColumn('SELECT COALESCE(SUM(amount),0) FROM incomes WHERE tenant_id=? AND project_id=?', [DEMO, $projectId]);
+    if (abs((float)$row['exp_base'] - $expBaseDb) > 0.01) return false;
+    if (abs((float)$row['inc_base'] - $incBaseDb) > 0.01) return false;
+    if (abs((float)$row['balance'] - ($incBaseDb - $expBaseDb)) > 0.01) return false;
+    // Column totals equal the sum of the rows.
+    $expBase = 0.0; $incBase = 0.0; $bal = 0.0;
+    foreach ($sum['projects'] as $r) { $expBase += (float)$r['exp_base']; $incBase += (float)$r['inc_base']; $bal += (float)$r['balance']; }
+    return abs($sum['totals']['exp_base'] - $expBase) < 0.01
+        && abs($sum['totals']['inc_base'] - $incBase) < 0.01
+        && abs($sum['totals']['balance'] - $bal) < 0.01;
+});
 check('dashboard: weekly progress derives from tasks in a done column', function () use ($db, $projectId) {
     $data = (new \App\Services\DashboardService())->tenant(DEMO);
     $row = null;

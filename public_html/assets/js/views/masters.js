@@ -106,7 +106,9 @@
     const SetupView = {
         setup() {
             const keys = Object.keys(RESOURCES);
-            const active = ref('construction-models');
+            // Deep-link support: #/setup?tab=clients selects that master.
+            const initialTab = (store.query && store.query.tab && RESOURCES[store.query.tab]) ? store.query.tab : 'construction-models';
+            const active = ref(initialTab);
             const rows = ref([]);
             const loading = ref(false);
             const saving = ref(false);

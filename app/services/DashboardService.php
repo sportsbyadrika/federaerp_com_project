@@ -61,6 +61,11 @@ final class DashboardService extends BaseService
                   GROUP BY p.id, p.name, p.code, p.project_type, p.status
                   ORDER BY progress_percent DESC, p.id DESC LIMIT 6", $p
             ),
+            'directory' => [
+                'clients'        => (int)$db->fetchColumn("SELECT COUNT(*) FROM clients WHERE tenant_id=:t AND deleted_at IS NULL", $p),
+                'suppliers'      => (int)$db->fetchColumn("SELECT COUNT(*) FROM suppliers WHERE tenant_id=:t AND deleted_at IS NULL", $p),
+                'subcontractors' => (int)$db->fetchColumn("SELECT COUNT(*) FROM subcontractors WHERE tenant_id=:t AND deleted_at IS NULL", $p),
+            ],
             'fleet' => [
                 'total'       => (int)$db->fetchColumn("SELECT COUNT(*) FROM vehicles_machinery WHERE tenant_id=:t AND deleted_at IS NULL", $p),
                 'in_use'      => (int)$db->fetchColumn("SELECT COUNT(*) FROM vehicles_machinery WHERE tenant_id=:t AND status='in_use' AND deleted_at IS NULL", $p),

@@ -57,6 +57,43 @@ final class ProjectService extends BaseService
         return $this->projects->forTenant($tenantId, [], ['order_by' => 'created_at', 'order_dir' => 'DESC']);
     }
 
+    /**
+     * Per-project financial rollup for the projects list: expenditure and income
+     * each split into base / GST / total, plus a base-income − base-expense
+     * balance, with grand totals across all projects.
+     */
+    public function financialSummary(int $tenantId): array
+    {
+        $rows = Database::instance()->fetchAll(
+            'SELECT p.id, p.code, p.name, p.project_type, p.status, c.name AS client_name,
+                    COALESCE(e.base,0)  AS exp_base,  COALESCE(e.gst,0)  AS exp_gst,  COALESCE(e.total,0)  AS exp_total,
+                    COALESCE(i.base,0)  AS inc_base,  COALESCE(i.gst,0)  AS inc_gst,  COALESCE(i.total,0)  AS inc_total
+               FROM projects p
+               LEFT JOIN clients c ON c.id = p.client_id
+               LEFT JOIN (SELECT project_id, SUM(amount) base, SUM(gst_amount) gst, SUM(total_amount) total
+                            FROM expenditures WHERE tenant_id = :te AND project_id IS NOT NULL GROUP BY project_id) e ON e.project_id = p.id
+               LEFT JOIN (SELECT project_id, SUM(amount) base, SUM(gst_amount) gst, SUM(total_amount) total
+                            FROM incomes WHERE tenant_id = :ti GROUP BY project_id) i ON i.project_id = p.id
+              WHERE p.tenant_id = :tp AND p.deleted_at IS NULL
+              ORDER BY p.created_at DESC',
+            [':te' => $tenantId, ':ti' => $tenantId, ':tp' => $tenantId]
+        );
+
+        $totals = ['exp_base' => 0.0, 'exp_gst' => 0.0, 'exp_total' => 0.0, 'inc_base' => 0.0, 'inc_gst' => 0.0, 'inc_total' => 0.0, 'balance' => 0.0];
+        foreach ($rows as &$r) {
+            foreach (['exp_base', 'exp_gst', 'exp_total', 'inc_base', 'inc_gst', 'inc_total'] as $k) {
+                $r[$k] = round((float)$r[$k], 2);
+                $totals[$k] += $r[$k];
+            }
+            $r['balance'] = round((float)$r['inc_base'] - (float)$r['exp_base'], 2);
+            $totals['balance'] += $r['balance'];
+        }
+        unset($r);
+        foreach ($totals as $k => $v) { $totals[$k] = round($v, 2); }
+
+        return ['projects' => $rows, 'totals' => $totals];
+    }
+
     public function getProject(int $tenantId, int $id): array
     {
         return $this->projects->findOrFail($id, $tenantId);

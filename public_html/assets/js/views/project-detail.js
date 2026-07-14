@@ -199,7 +199,7 @@
                     <a href="#/projects" class="text-sm text-brand hover:underline">← Projects</a>
                     <h1 class="text-xl font-semibold text-slate-800">{{ project.name }} <span class="text-sm font-normal text-slate-400">{{ project.code }}</span></h1>
                 </div>
-                <a href="#/projects" class="px-3 py-2 text-sm rounded-lg border border-slate-300 text-slate-600 hover:bg-slate-50">Open board</a>
+                <a :href="'#/board/' + id" class="px-3 py-2 text-sm rounded-lg border border-slate-300 text-slate-600 hover:bg-slate-50">Open board</a>
             </div>
 
             <div class="flex flex-wrap gap-1 p-1 bg-slate-100 rounded-lg text-sm mb-5 w-fit">
