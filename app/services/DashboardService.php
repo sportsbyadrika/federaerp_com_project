@@ -31,9 +31,10 @@ final class DashboardService extends BaseService
         $db = Database::instance();
         $p = [':t' => $tenantId];
 
-        // Income + expenditure come from the dedicated modules (source of truth).
-        $income = (float)$db->fetchColumn("SELECT COALESCE(SUM(total_amount),0) FROM incomes WHERE tenant_id=:t", $p);
-        $expense = (float)$db->fetchColumn("SELECT COALESCE(SUM(amount),0) FROM expenditures WHERE tenant_id=:t", $p);
+        // Income + expenditure come from the dedicated modules (source of truth),
+        // each split into base / GST / total.
+        $inc = $db->fetch("SELECT COALESCE(SUM(amount),0) AS base, COALESCE(SUM(gst_amount),0) AS gst, COALESCE(SUM(total_amount),0) AS total FROM incomes WHERE tenant_id=:t", $p);
+        $exp = $db->fetch("SELECT COALESCE(SUM(amount),0) AS base, COALESCE(SUM(gst_amount),0) AS gst, COALESCE(SUM(total_amount),0) AS total FROM expenditures WHERE tenant_id=:t", $p);
 
         $org = $db->fetch(
             "SELECT id, name, legal_name, email, phone, address, city, country, currency, created_at
@@ -67,9 +68,17 @@ final class DashboardService extends BaseService
                 'available'   => (int)$db->fetchColumn("SELECT COUNT(*) FROM vehicles_machinery WHERE tenant_id=:t AND status='available' AND deleted_at IS NULL", $p),
             ],
             'finance' => [
-                'income'      => round($income, 2),
-                'expense'     => round($expense, 2),
-                'net'         => round($income - $expense, 2),
+                'income' => [
+                    'base'  => round((float)$inc['base'], 2),
+                    'gst'   => round((float)$inc['gst'], 2),
+                    'total' => round((float)$inc['total'], 2),
+                ],
+                'expense' => [
+                    'base'  => round((float)$exp['base'], 2),
+                    'gst'   => round((float)$exp['gst'], 2),
+                    'total' => round((float)$exp['total'], 2),
+                ],
+                'net' => round((float)$inc['total'] - (float)$exp['total'], 2),
             ],
             'documents_preview' => $db->fetchAll(
                 "SELECT sp.id, sp.original_name, sp.caption, sp.created_at FROM site_photos sp
