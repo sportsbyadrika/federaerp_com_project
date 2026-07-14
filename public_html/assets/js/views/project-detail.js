@@ -82,12 +82,19 @@
                 if (c) project.currency_symbol = c.symbol;
             }
 
+            // contract value <-> total contract value, linked by GST %
+            const cRound2 = (n) => Math.round((+n || 0) * 100) / 100;
+            const contractGstAmount = computed(() => cRound2((+project.contract_value || 0) * (+project.contract_gst_percent || 0) / 100));
+            function contractFromBase() { project.contract_total = cRound2((+project.contract_value || 0) * (1 + (+project.contract_gst_percent || 0) / 100)); }
+            function contractFromTotal() { project.contract_value = cRound2((+project.contract_total || 0) / (1 + (+project.contract_gst_percent || 0) / 100)); }
+
             async function saveDetails() {
                 saving.value = true;
                 try {
                     await api.put('/api/projects/' + id.value, {
                         code: project.code, name: project.name, client_id: project.client_id || null,
                         project_type: project.project_type, contract_value: project.contract_value,
+                        contract_gst_percent: project.contract_gst_percent || 0,
                         currency_code: project.currency_code, currency_symbol: project.currency_symbol,
                         site_address: project.site_address, status: project.status,
                         start_date: project.start_date, end_date: project.end_date, description: project.description,
@@ -188,6 +195,7 @@
 
             return { FLOOR_CATALOG, id, tab, loading, saving, project, clients, currencies, floors, selectedCodes, entries, boqTotal,
                 masterItems, stages, nf, pmoney, lineSum, onCurrencyChange, saveDetails, saveFloors,
+                contractGstAmount, contractFromBase, contractFromTotal,
                 showModal, editingId, form, modalLines, modalRowAmount, modalTotal, openAdd, openEdit, onPickMaster, saveEntry, deleteEntry,
                 stagesGrand, stagesDiff, showStageModal, editingStageId, stageForm, openStageAdd, openStageEdit, saveStage, deleteStage, onStagePercentChange };
         },
@@ -220,12 +228,14 @@
                     <div><label class="block text-sm text-slate-600 mb-1">Type of project</label>
                         <select v-model="project.project_type" class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"><option value="new">New</option><option value="renovation">Renovation</option></select>
                     </div>
-                    <div><label class="block text-sm text-slate-600 mb-1">Contract value</label><input v-model.number="project.contract_value" type="number" step="0.01" class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-brand/40 focus:border-brand"></div>
                     <div><label class="block text-sm text-slate-600 mb-1">Currency</label>
                         <select v-model="project.currency_code" @change="onCurrencyChange" class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm">
                             <option v-for="c in currencies" :key="c.id" :value="c.code">{{ c.code }} ({{ c.symbol }})</option>
                         </select>
                     </div>
+                    <div><label class="block text-sm text-slate-600 mb-1">Contract value (base)</label><input v-model.number="project.contract_value" @input="contractFromBase" type="number" step="0.01" class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-brand/40 focus:border-brand"></div>
+                    <div><label class="block text-sm text-slate-600 mb-1">GST %</label><input v-model.number="project.contract_gst_percent" @input="contractFromBase" type="number" step="0.01" class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-brand/40 focus:border-brand"></div>
+                    <div class="sm:col-span-2"><label class="block text-sm text-slate-600 mb-1">Total contract value <span class="text-slate-400">(base + GST — edit either side; GST {{ pmoney(contractGstAmount) }})</span></label><input v-model.number="project.contract_total" @input="contractFromTotal" type="number" step="0.01" class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-brand/40 focus:border-brand"></div>
                     <div><label class="block text-sm text-slate-600 mb-1">Site address</label><input v-model="project.site_address" class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-brand/40 focus:border-brand"></div>
                     <div><label class="block text-sm text-slate-600 mb-1">Status</label>
                         <select v-model="project.status" class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"><option value="planning">Planning</option><option value="active">Active</option><option value="on_hold">On hold</option><option value="completed">Completed</option><option value="cancelled">Cancelled</option></select>
