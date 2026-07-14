@@ -18,9 +18,12 @@
         setup() {
             const rows = ref([]);
             const total = ref(0);
+            const gstTotal = ref(0);
+            const baseTotal = ref(0);
             const loading = ref(true);
             const saving = ref(false);
             const filterScope = ref('');
+            const filterProjectId = ref('');
             const projects = ref([]);
             const types = ref([]);
             const suppliers = ref([]);
@@ -29,13 +32,21 @@
 
             const fmt = (n) => CSApp.money(n);
 
+            const nf = (n) => new Intl.NumberFormat(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(+n || 0);
+            const sym = () => (store.currency && store.currency.symbol) || '';
+
             const showModal = ref(false);
             const editingId = ref(null);
             const form = reactive({
                 scope: 'project', project_id: null, expenditure_type_id: null,
                 party_type: 'none', party_id: null, task_id: null,
-                amount: 0, mode: 'cash', reference: '', expense_date: new Date().toISOString().slice(0, 10), notes: '',
+                amount: 0, gst_percent: 0, total: 0, mode: 'cash', reference: '', expense_date: new Date().toISOString().slice(0, 10), notes: '',
             });
+            const round2 = (n) => Math.round((+n || 0) * 100) / 100;
+            const gstAmount = computed(() => round2((+form.amount || 0) * (+form.gst_percent || 0) / 100));
+            // Two-way base <-> total, linked by GST %.
+            function recalcFromBase() { form.total = round2((+form.amount || 0) * (1 + (+form.gst_percent || 0) / 100)); }
+            function recalcFromTotal() { form.amount = round2((+form.total || 0) / (1 + (+form.gst_percent || 0) / 100)); }
 
             const partyOptions = computed(() => form.party_type === 'supplier' ? suppliers.value : (form.party_type === 'subcontractor' ? subcontractors.value : []));
 
@@ -48,10 +59,12 @@
             async function load() {
                 loading.value = true;
                 try {
-                    let url = '/api/expenditures';
-                    if (filterScope.value) url += '?scope=' + encodeURIComponent(filterScope.value);
+                    const qs = [];
+                    if (filterScope.value) qs.push('scope=' + encodeURIComponent(filterScope.value));
+                    if (filterProjectId.value) qs.push('project_id=' + encodeURIComponent(filterProjectId.value));
+                    const url = '/api/expenditures' + (qs.length ? '?' + qs.join('&') : '');
                     const d = (await api.get(url)).data;
-                    rows.value = d.items; total.value = d.total;
+                    rows.value = d.items; total.value = d.total; gstTotal.value = d.gst || 0; baseTotal.value = d.base || 0;
                 } catch (e) { CSApp.flash('error', e.message); }
                 finally { loading.value = false; }
             }
@@ -70,7 +83,7 @@
                 Object.assign(form, {
                     scope: 'project', project_id: null, expenditure_type_id: null,
                     party_type: 'none', party_id: null, task_id: null,
-                    amount: 0, mode: 'cash', reference: '', expense_date: new Date().toISOString().slice(0, 10), notes: '',
+                    amount: 0, gst_percent: 0, total: 0, mode: 'cash', reference: '', expense_date: new Date().toISOString().slice(0, 10), notes: '',
                 });
                 tasks.value = [];
                 showModal.value = true;
@@ -80,7 +93,8 @@
                 Object.assign(form, {
                     scope: r.scope, project_id: r.project_id, expenditure_type_id: r.expenditure_type_id,
                     party_type: r.party_type, party_id: r.party_id, task_id: r.task_id,
-                    amount: +r.amount, mode: r.mode, reference: r.reference || '', expense_date: (r.expense_date || '').slice(0, 10), notes: r.notes || '',
+                    amount: +r.amount, gst_percent: +r.gst_percent, total: +r.total_amount,
+                    mode: r.mode, reference: r.reference || '', expense_date: (r.expense_date || '').slice(0, 10), notes: r.notes || '',
                 });
                 await loadTasks();
                 showModal.value = true;
@@ -97,7 +111,8 @@
                         party_type: form.party_type,
                         party_id: form.party_type === 'none' ? null : (form.party_id || null),
                         task_id: form.scope === 'project' ? (form.task_id || null) : null,
-                        amount: +form.amount, mode: form.mode, reference: form.reference,
+                        amount: +form.amount, gst_percent: +form.gst_percent || 0,
+                        mode: form.mode, reference: form.reference,
                         expense_date: form.expense_date, notes: form.notes,
                     };
                     if (editingId.value) await api.put('/api/expenditures/' + editingId.value, payload);
@@ -114,8 +129,8 @@
 
             onMounted(async () => { await loadLists(); await load(); });
             return {
-                rows, total, loading, saving, filterScope, projects, types, tasks, fmt, MODES, modeLabel,
-                showModal, editingId, form, partyOptions, load, openAdd, openEdit, save, remove,
+                rows, total, gstTotal, baseTotal, loading, saving, filterScope, filterProjectId, projects, types, tasks, fmt, nf, sym, MODES, modeLabel,
+                showModal, editingId, form, partyOptions, gstAmount, recalcFromBase, recalcFromTotal, load, openAdd, openEdit, save, remove,
                 onScopeChange, onProjectChange, onPartyTypeChange,
             };
         },
@@ -128,13 +143,28 @@
             <p class="text-sm text-slate-500 mb-5">Project-wise and institution-wise spend.</p>
 
             <div class="flex items-center justify-between mb-4 flex-wrap gap-3">
-                <div class="flex items-center gap-2">
-                    <span class="text-xs text-slate-400">Scope</span>
-                    <select v-model="filterScope" @change="load" class="rounded-lg border border-slate-300 px-2 py-1 text-sm">
-                        <option value="">All</option><option value="project">Project</option><option value="institutional">Institutional</option>
-                    </select>
+                <div class="flex items-center gap-3 flex-wrap">
+                    <div class="flex items-center gap-2">
+                        <span class="text-xs text-slate-400">Scope</span>
+                        <select v-model="filterScope" @change="load" class="rounded-lg border border-slate-300 px-2 py-1 text-sm">
+                            <option value="">All</option><option value="project">Project</option><option value="institutional">Institutional</option>
+                        </select>
+                    </div>
+                    <div class="flex items-center gap-2">
+                        <span class="text-xs text-slate-400">Project</span>
+                        <select v-model="filterProjectId" @change="load" class="rounded-lg border border-slate-300 px-2 py-1 text-sm">
+                            <option value="">All projects</option>
+                            <option v-for="p in projects" :key="p.id" :value="p.id">{{ p.name }}</option>
+                        </select>
+                    </div>
                 </div>
-                <div class="text-sm text-slate-500">Total: <span class="font-semibold text-rose-600">{{ fmt(total) }}</span></div>
+                <div class="text-sm text-slate-500 text-right">
+                    <span>Base: <span class="text-slate-700">{{ fmt(baseTotal) }}</span></span>
+                    <span class="mx-1 text-slate-300">·</span>
+                    <span>GST: <span class="text-slate-700">{{ fmt(gstTotal) }}</span></span>
+                    <span class="mx-1 text-slate-300">·</span>
+                    <span>Total: <span class="font-semibold text-rose-600">{{ fmt(total) }}</span></span>
+                </div>
             </div>
 
             <div class="bg-white rounded-xl border border-slate-200 p-5">
@@ -144,7 +174,7 @@
                         <thead><tr class="text-left text-slate-400 border-b border-slate-100">
                             <th class="py-2 px-3">Date</th><th class="py-2 px-3">Scope</th><th class="py-2 px-3">Project</th>
                             <th class="py-2 px-3">Type</th><th class="py-2 px-3">Party</th><th class="py-2 px-3">Task</th>
-                            <th class="py-2 px-3 text-right">Amount</th><th class="py-2 px-3">Mode</th><th class="py-2 px-3"></th>
+                            <th class="py-2 px-3 text-right">Base</th><th class="py-2 px-3 text-right">GST</th><th class="py-2 px-3 text-right">Total</th><th class="py-2 px-3">Mode</th><th class="py-2 px-3"></th>
                         </tr></thead>
                         <tbody>
                             <tr v-for="r in rows" :key="r.id" class="border-b border-slate-50">
@@ -154,14 +184,16 @@
                                 <td class="py-2 px-3 text-slate-700">{{ r.type_name || '—' }}</td>
                                 <td class="py-2 px-3 text-slate-700">{{ r.party_name || '—' }}</td>
                                 <td class="py-2 px-3 text-slate-600">{{ r.task_title || '—' }}</td>
-                                <td class="py-2 px-3 text-right font-medium text-slate-800 whitespace-nowrap">{{ fmt(r.amount) }}</td>
+                                <td class="py-2 px-3 text-right text-slate-600 whitespace-nowrap">{{ fmt(r.amount) }}</td>
+                                <td class="py-2 px-3 text-right text-slate-500 whitespace-nowrap">{{ fmt(r.gst_amount) }}</td>
+                                <td class="py-2 px-3 text-right font-medium text-slate-800 whitespace-nowrap">{{ fmt(r.total_amount) }}</td>
                                 <td class="py-2 px-3 text-slate-600 whitespace-nowrap">{{ modeLabel(r.mode) }}</td>
                                 <td class="py-2 px-3 text-right whitespace-nowrap">
                                     <button @click="openEdit(r)" class="text-brand hover:underline text-xs mr-2">Edit</button>
                                     <button @click="remove(r)" class="text-rose-400 hover:text-rose-600 text-xs">Delete</button>
                                 </td>
                             </tr>
-                            <tr v-if="!rows.length"><td colspan="9" class="py-8 text-center text-slate-400">No expenditure yet — click “+ Add expenditure”.</td></tr>
+                            <tr v-if="!rows.length"><td colspan="11" class="py-8 text-center text-slate-400">No expenditure yet — click “+ Add expenditure”.</td></tr>
                         </tbody>
                     </table>
                 </div>
@@ -216,8 +248,16 @@
                             </select>
                         </div>
                         <div>
-                            <label class="block text-xs text-slate-500 mb-1">Amount</label>
-                            <input v-model.number="form.amount" type="number" step="0.01" class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm">
+                            <label class="block text-xs text-slate-500 mb-1">Amount (base)</label>
+                            <input v-model.number="form.amount" @input="recalcFromBase" type="number" step="0.01" class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm">
+                        </div>
+                        <div>
+                            <label class="block text-xs text-slate-500 mb-1">GST %</label>
+                            <input v-model.number="form.gst_percent" @input="recalcFromBase" type="number" step="0.01" class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm">
+                        </div>
+                        <div class="sm:col-span-2">
+                            <label class="block text-xs text-slate-500 mb-1">Total Expense <span class="text-slate-400">(base + GST — edit either side)</span></label>
+                            <input v-model.number="form.total" @input="recalcFromTotal" type="number" step="0.01" class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm">
                         </div>
                         <div>
                             <label class="block text-xs text-slate-500 mb-1">Mode of payment</label>
@@ -237,6 +277,10 @@
                             <label class="block text-xs text-slate-500 mb-1">Notes</label>
                             <textarea v-model="form.notes" rows="2" class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-brand/40 focus:border-brand"></textarea>
                         </div>
+                    </div>
+                    <div class="mt-3 rounded-lg bg-slate-50 border border-slate-200 px-4 py-2 text-sm flex justify-between">
+                        <span class="text-slate-500">GST: <span class="text-slate-700">{{ sym() }}{{ nf(gstAmount) }}</span></span>
+                        <span class="text-slate-500">Total: <span class="font-semibold text-slate-800">{{ sym() }}{{ nf(form.total) }}</span></span>
                     </div>
                     <div class="flex justify-end gap-2 mt-5">
                         <button @click="showModal=false" class="px-4 py-2 text-sm rounded-lg border border-slate-300 text-slate-600">Cancel</button>

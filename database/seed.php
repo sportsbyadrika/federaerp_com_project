@@ -459,22 +459,27 @@ try {
     $db->insert('staff_members', ['tenant_id' => DEMO_ORG, 'staff_code' => 'STF-003', 'name' => 'Helper Team', 'staff_type' => 'unskilled', 'status' => 'active']);
 
     // ---- Expenditure + Income samples -------------------------------------
+    // Materials purchase carries 18% GST; the other two are GST-free.
+    $matBase = 42000.0; $matGst = round($matBase * 18 / 100, 2);
     $db->insert('expenditures', [
         'tenant_id' => DEMO_ORG, 'scope' => 'project', 'project_id' => $projectId,
         'expenditure_type_id' => $expTypeIds['Materials'], 'party_type' => 'supplier', 'party_id' => $supId,
-        'amount' => 42000, 'mode' => 'fund_transfer', 'reference' => 'PO-cement-batch1',
+        'amount' => $matBase, 'gst_percent' => 18, 'gst_amount' => $matGst, 'total_amount' => round($matBase + $matGst, 2),
+        'mode' => 'fund_transfer', 'reference' => 'PO-cement-batch1',
         'expense_date' => '2026-03-05', 'notes' => 'Cement + steel purchase', 'created_by' => $adminId,
     ]);
     $db->insert('expenditures', [
         'tenant_id' => DEMO_ORG, 'scope' => 'project', 'project_id' => $projectId,
         'expenditure_type_id' => $expTypeIds['Labour'], 'party_type' => 'subcontractor', 'party_id' => $scId,
-        'amount' => 18000, 'mode' => 'cheque', 'reference' => 'CHQ-00231',
+        'amount' => 18000, 'gst_percent' => 0, 'gst_amount' => 0, 'total_amount' => 18000,
+        'mode' => 'cheque', 'reference' => 'CHQ-00231',
         'expense_date' => '2026-03-20', 'notes' => 'Steel erection labour', 'created_by' => $adminId,
     ]);
     $db->insert('expenditures', [
         'tenant_id' => DEMO_ORG, 'scope' => 'institutional', 'project_id' => null,
         'expenditure_type_id' => $expTypeIds['Office & Admin'], 'party_type' => 'none', 'party_id' => null,
-        'amount' => 6500, 'mode' => 'cash', 'reference' => 'office-rent-mar',
+        'amount' => 6500, 'gst_percent' => 0, 'gst_amount' => 0, 'total_amount' => 6500,
+        'mode' => 'cash', 'reference' => 'office-rent-mar',
         'expense_date' => '2026-03-01', 'notes' => 'Office rent', 'created_by' => $adminId,
     ]);
 

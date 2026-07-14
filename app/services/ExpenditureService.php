@@ -19,7 +19,8 @@ final class ExpenditureService extends BaseService
     {
         $this->exp = new GenericModel('expenditures', [
             'tenant_id', 'scope', 'project_id', 'expenditure_type_id', 'party_type', 'party_id',
-            'task_id', 'amount', 'mode', 'reference', 'expense_date', 'notes', 'created_by',
+            'task_id', 'amount', 'gst_percent', 'gst_amount', 'total_amount',
+            'mode', 'reference', 'expense_date', 'notes', 'created_by',
         ]);
     }
 
@@ -43,9 +44,13 @@ final class ExpenditureService extends BaseService
               ORDER BY e.expense_date DESC, e.id DESC',
             $params
         );
-        $total = 0.0;
-        foreach ($rows as $r) { $total += (float)$r['amount']; }
-        return ['items' => $rows, 'total' => round($total, 2)];
+        $base = 0.0; $gst = 0.0; $total = 0.0;
+        foreach ($rows as $r) {
+            $base += (float)$r['amount'];
+            $gst += (float)$r['gst_amount'];
+            $total += (float)$r['total_amount'];
+        }
+        return ['items' => $rows, 'base' => round($base, 2), 'gst' => round($gst, 2), 'total' => round($total, 2)];
     }
 
     public function create(int $tenantId, ?int $userId, array $in): array
@@ -75,6 +80,9 @@ final class ExpenditureService extends BaseService
         if (!in_array($partyType, ['supplier', 'subcontractor', 'none'], true)) $partyType = 'none';
         $mode = $in['mode'] ?? 'cash';
         if (!in_array($mode, ['cash', 'fund_transfer', 'cheque', 'dd'], true)) $mode = 'cash';
+        $amount = round((float)($in['amount'] ?? 0), 2);
+        $gstPct = round((float)($in['gst_percent'] ?? 0), 3);
+        $gstAmount = round($amount * $gstPct / 100, 2);
         return [
             'tenant_id'           => $tenantId,
             'scope'               => $scope,
@@ -83,7 +91,10 @@ final class ExpenditureService extends BaseService
             'party_type'          => $partyType,
             'party_id'            => $partyType === 'none' ? null : ($in['party_id'] ?? null),
             'task_id'             => $scope === 'project' ? ($in['task_id'] ?? null) : null,
-            'amount'              => round((float)($in['amount'] ?? 0), 2),
+            'amount'              => $amount,
+            'gst_percent'         => $gstPct,
+            'gst_amount'          => $gstAmount,
+            'total_amount'        => round($amount + $gstAmount, 2),
             'mode'                => $mode,
             'reference'           => $in['reference'] ?? null,
             'expense_date'        => $in['expense_date'] ?? date('Y-m-d'),

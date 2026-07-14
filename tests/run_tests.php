@@ -273,16 +273,19 @@ check('construction stages: per-record create/update/delete + totals', function 
     $del = $svc->deleteStage(DEMO, $newId);
     return count($del['stages']) === 3 && abs($del['difference'] - 0.00) < 0.01;
 });
-check('expenditure: list joins party/type/project + total; CRUD', function () use ($projectId) {
+check('expenditure: GST base/gst/total, joins, scope filters + CRUD', function () use ($projectId) {
     $svc = new \App\Services\ExpenditureService();
     $all = $svc->list(DEMO);
-    // seed: 42000 + 18000 + 6500 = 66500
-    if (abs($all['total'] - 66500.00) > 0.01) return false;
+    // seed: base 42000+18000+6500 = 66500; GST 7560 (18% on materials); total 74060
+    if (abs($all['base'] - 66500.00) > 0.01 || abs($all['gst'] - 7560.00) > 0.01 || abs($all['total'] - 74060.00) > 0.01) return false;
     $proj = $svc->list(DEMO, ['scope' => 'project']);
     $inst = $svc->list(DEMO, ['scope' => 'institutional']);
-    if (abs($proj['total'] - 60000.00) > 0.01 || abs($inst['total'] - 6500.00) > 0.01) return false;
-    $row = $svc->create(DEMO, null, ['scope' => 'project', 'project_id' => $projectId, 'party_type' => 'supplier', 'amount' => 1000, 'mode' => 'dd', 'expense_date' => '2026-05-01']);
-    $svc->update(DEMO, (int)$row['id'], ['scope' => 'project', 'project_id' => $projectId, 'amount' => 2000, 'expense_date' => '2026-05-01']);
+    if (abs($proj['total'] - 67560.00) > 0.01 || abs($inst['total'] - 6500.00) > 0.01) return false;
+    // create computes GST amount + total from base + gst%
+    $row = $svc->create(DEMO, null, ['scope' => 'project', 'project_id' => $projectId, 'party_type' => 'supplier', 'amount' => 1000, 'gst_percent' => 18, 'mode' => 'dd', 'expense_date' => '2026-05-01']);
+    if (abs((float)$row['gst_amount'] - 180.00) > 0.01 || abs((float)$row['total_amount'] - 1180.00) > 0.01) return false;
+    $upd = $svc->update(DEMO, (int)$row['id'], ['scope' => 'project', 'project_id' => $projectId, 'amount' => 2000, 'gst_percent' => 5, 'expense_date' => '2026-05-01']);
+    if (abs((float)$upd['gst_amount'] - 100.00) > 0.01 || abs((float)$upd['total_amount'] - 2100.00) > 0.01) return false;
     $svc->delete(DEMO, (int)$row['id']);
     return true;
 });
