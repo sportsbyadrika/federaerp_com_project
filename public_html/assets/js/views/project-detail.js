@@ -36,6 +36,7 @@
             const boqTotal = ref(0);
             const masterItems = ref([]);
             const stages = ref([]);
+            const location = reactive({ lat: null, lng: null });
 
             // money in the PROJECT's currency (falls back to the tenant default)
             const nf = (n) => new Intl.NumberFormat(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(n || 0);
@@ -52,6 +53,8 @@
                 try {
                     const p = (await api.get('/api/projects/' + id.value)).data;
                     Object.assign(project, p);
+                    location.lat = p.latitude != null && p.latitude !== '' ? +p.latitude : null;
+                    location.lng = p.longitude != null && p.longitude !== '' ? +p.longitude : null;
                     clients.value = (await api.get('/api/clients')).data;
                     try { currencies.value = (await api.get('/api/currencies')).data; } catch (e) { currencies.value = []; }
                     floors.value = (await api.get('/api/projects/' + id.value + '/floors')).data;
@@ -97,6 +100,7 @@
                         contract_gst_percent: project.contract_gst_percent || 0,
                         currency_code: project.currency_code, currency_symbol: project.currency_symbol,
                         site_address: project.site_address, status: project.status,
+                        latitude: (location.lat == null ? null : location.lat), longitude: (location.lng == null ? null : location.lng),
                         start_date: project.start_date, end_date: project.end_date, description: project.description,
                     });
                     CSApp.flash('success', 'Project updated');
@@ -194,7 +198,7 @@
             }
 
             return { FLOOR_CATALOG, id, tab, loading, saving, project, clients, currencies, floors, selectedCodes, entries, boqTotal,
-                masterItems, stages, nf, pmoney, lineSum, onCurrencyChange, saveDetails, saveFloors,
+                masterItems, stages, location, nf, pmoney, lineSum, onCurrencyChange, saveDetails, saveFloors,
                 contractGstAmount, contractFromBase, contractFromTotal,
                 showModal, editingId, form, modalLines, modalRowAmount, modalTotal, openAdd, openEdit, onPickMaster, saveEntry, deleteEntry,
                 stagesGrand, stagesDiff, showStageModal, editingStageId, stageForm, openStageAdd, openStageEdit, saveStage, deleteStage, onStagePercentChange };
@@ -243,6 +247,10 @@
                     <div><label class="block text-sm text-slate-600 mb-1">Start date</label><input v-model="project.start_date" type="date" class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"></div>
                     <div><label class="block text-sm text-slate-600 mb-1">Target end date</label><input v-model="project.end_date" type="date" class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"></div>
                     <div class="sm:col-span-2"><label class="block text-sm text-slate-600 mb-1">Description</label><textarea v-model="project.description" rows="2" class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-brand/40 focus:border-brand"></textarea></div>
+                    <div class="sm:col-span-2">
+                        <label class="block text-sm text-slate-600 mb-1">Location <span class="text-slate-400">(mark on the map)</span></label>
+                        <map-field v-if="tab==='details'" v-model="location" :editable="true" height="20rem"></map-field>
+                    </div>
                 </div>
                 <div class="mt-4"><button @click="saveDetails" :disabled="saving" class="px-4 py-2 text-sm rounded-lg bg-brand text-white hover:bg-brand-dark disabled:opacity-60">{{ saving ? 'Saving…' : 'Save changes' }}</button></div>
             </div>

@@ -36,6 +36,7 @@ final class ProjectService extends BaseService
         ]);
         $this->projects = new GenericModel('projects', [
             'tenant_id', 'client_id', 'estimate_id', 'code', 'name', 'project_type', 'description', 'site_address',
+            'latitude', 'longitude',
             'contract_value', 'contract_gst_percent', 'contract_gst_amount', 'contract_total',
             'currency_code', 'currency_symbol', 'start_date', 'end_date', 'status', 'progress_percent', 'project_manager_id',
         ], softDelete: true);
@@ -66,7 +67,7 @@ final class ProjectService extends BaseService
     public function financialSummary(int $tenantId): array
     {
         $rows = Database::instance()->fetchAll(
-            'SELECT p.id, p.code, p.name, p.project_type, p.status, p.client_id, c.name AS client_name,
+            'SELECT p.id, p.code, p.name, p.project_type, p.status, p.client_id, p.latitude, p.longitude, c.name AS client_name,
                     COALESCE(e.base,0)  AS exp_base,  COALESCE(e.gst,0)  AS exp_gst,  COALESCE(e.total,0)  AS exp_total,
                     COALESCE(i.base,0)  AS inc_base,  COALESCE(i.gst,0)  AS inc_gst,  COALESCE(i.total,0)  AS inc_total
                FROM projects p
@@ -120,6 +121,8 @@ final class ProjectService extends BaseService
             'project_type'         => $projectType,
             'description'          => $input['description'] ?? null,
             'site_address'         => $input['site_address'] ?? null,
+            'latitude'             => $this->coord($input['latitude'] ?? null),
+            'longitude'            => $this->coord($input['longitude'] ?? null),
             'contract_value'       => $base,
             'contract_gst_percent' => $pct,
             'contract_gst_amount'  => $gst,
@@ -136,6 +139,9 @@ final class ProjectService extends BaseService
     public function updateProject(int $tenantId, int $id, array $input): array
     {
         $existing = $this->projects->findOrFail($id, $tenantId);
+        // Blank map coordinates must persist as NULL, not '' (DECIMAL column).
+        if (array_key_exists('latitude', $input)) { $input['latitude'] = $this->coord($input['latitude']); }
+        if (array_key_exists('longitude', $input)) { $input['longitude'] = $this->coord($input['longitude']); }
         // Recompute the contract GST/total when the base or % is being changed.
         if (array_key_exists('contract_value', $input) || array_key_exists('contract_gst_percent', $input)) {
             $base = round((float)($input['contract_value'] ?? $existing['contract_value']), 2);
@@ -154,6 +160,13 @@ final class ProjectService extends BaseService
     {
         $this->projects->findOrFail($id, $tenantId);
         $this->projects->delete($id, $tenantId);
+    }
+
+    /** Normalise a map coordinate: blank/non-numeric -> null, else a float. */
+    private function coord($value): ?float
+    {
+        if ($value === null || $value === '' || !is_numeric($value)) { return null; }
+        return (float)$value;
     }
 
     // ---- Kanban columns (statuses) ----------------------------------------

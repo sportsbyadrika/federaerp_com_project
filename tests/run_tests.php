@@ -338,6 +338,17 @@ check('projects: contract GST computed on create + update', function () use ($db
     $svc->deleteProject(DEMO, (int)$p['id']);
     return true;
 });
+check('projects: map location persists; blank coords normalise to NULL', function () {
+    $svc = new \App\Services\ProjectService();
+    $p = $svc->createProject(DEMO, ['name' => 'Located', 'latitude' => 12.9716, 'longitude' => 77.5946]);
+    if (abs((float)$p['latitude'] - 12.9716) > 0.0001 || abs((float)$p['longitude'] - 77.5946) > 0.0001) return false;
+    $cleared = $svc->updateProject(DEMO, (int)$p['id'], ['latitude' => '', 'longitude' => '']);
+    if ($cleared['latitude'] !== null || $cleared['longitude'] !== null) return false;
+    $reset = $svc->updateProject(DEMO, (int)$p['id'], ['latitude' => 19.076, 'longitude' => 72.8777]);
+    $ok = abs((float)$reset['latitude'] - 19.076) < 0.0001;
+    $svc->deleteProject(DEMO, (int)$p['id']);
+    return $ok;
+});
 check('projects: financial summary rolls up income/expense per project + totals', function () use ($db, $projectId) {
     $svc = new \App\Services\ProjectService();
     $sum = $svc->financialSummary(DEMO);

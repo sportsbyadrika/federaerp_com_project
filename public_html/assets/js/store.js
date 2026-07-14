@@ -89,6 +89,8 @@
             if (componentDef) this._pending.push([componentName, componentDef]);
         },
         _pending: [],
+        /** Register a global component (not tied to a route). */
+        component(name, def) { this._pending.push([name, def]); },
         routes,
         /** Match the current route to a component name (+ set params). */
         resolve(app) {

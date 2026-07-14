@@ -13,6 +13,7 @@
             const saving = ref(false);
             const clients = ref([]);
             const currencies = ref([]);
+            const location = reactive({ lat: null, lng: null });
             const form = reactive({
                 code: '', name: '', client_id: null, project_type: 'new',
                 contract_value: 0, contract_gst_percent: 0, contract_total: 0,
@@ -64,6 +65,7 @@
                         contract_value: +form.contract_value || 0, contract_gst_percent: +form.contract_gst_percent || 0,
                         currency_code: form.currency_code || null, currency_symbol: form.currency_symbol || null,
                         site_address: form.site_address, description: form.description,
+                        latitude: (location.lat == null ? null : location.lat), longitude: (location.lng == null ? null : location.lng),
                     };
                     if (form.code) payload.code = form.code;
                     if (form.start_date) payload.start_date = form.start_date;
@@ -76,7 +78,7 @@
             }
 
             onMounted(loadLists);
-            return { form, saving, clients, currencies, gstAmount, sym, nf, recalcFromBase, recalcFromTotal, onCurrencyChange, save,
+            return { form, saving, clients, currencies, location, gstAmount, sym, nf, recalcFromBase, recalcFromTotal, onCurrencyChange, save,
                 showClient, savingClient, clientForm, openClient, saveClient };
         },
         template: `
@@ -128,6 +130,11 @@
                     <div><label class="block text-sm text-slate-600 mb-1">Target end date</label><input v-model="form.end_date" type="date" class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"></div>
                     <div class="hidden lg:block"></div>
                     <div class="sm:col-span-2 lg:col-span-3"><label class="block text-sm text-slate-600 mb-1">Description</label><textarea v-model="form.description" rows="3" class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-brand/40 focus:border-brand"></textarea></div>
+
+                    <div class="sm:col-span-2 lg:col-span-3">
+                        <label class="block text-sm text-slate-600 mb-1">Location <span class="text-slate-400">(mark on the map)</span></label>
+                        <map-field v-model="location" :editable="true" height="20rem"></map-field>
+                    </div>
                 </div>
                 <div class="flex justify-end gap-2 mt-5">
                     <a href="#/projects" class="px-4 py-2 text-sm rounded-lg border border-slate-300 text-slate-600">Cancel</a>
