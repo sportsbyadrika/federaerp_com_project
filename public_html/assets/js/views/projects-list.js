@@ -6,7 +6,7 @@
  */
 (function () {
     'use strict';
-    const { ref, computed, onMounted } = Vue;
+    const { ref, reactive, computed, onMounted } = Vue;
 
     const ProjectsListView = {
         setup() {
@@ -17,6 +17,15 @@
             const search = ref('');
 
             const fmt = (n) => CSApp.money(n);
+
+            // Location view modal
+            const mapModal = reactive({ open: false, name: '', coords: { lat: null, lng: null } });
+            const hasLoc = (p) => p.latitude != null && p.latitude !== '' && p.longitude != null && p.longitude !== '';
+            function openMap(p) {
+                mapModal.name = p.name;
+                mapModal.coords = { lat: hasLoc(p) ? +p.latitude : null, lng: hasLoc(p) ? +p.longitude : null };
+                mapModal.open = true;
+            }
 
             async function load() {
                 loading.value = true;
@@ -49,7 +58,7 @@
 
             const hasAny = computed(() => allProjects.value.length > 0);
             onMounted(async () => { await loadClients(); await load(); });
-            return { projects, totals, loading, clients, clientFilter, search, hasAny, fmt };
+            return { projects, totals, loading, clients, clientFilter, search, hasAny, fmt, mapModal, hasLoc, openMap };
         },
         template: `
         <div>
@@ -104,7 +113,10 @@
                         <tbody>
                             <tr v-for="p in projects" :key="p.id" class="border-b border-slate-50 hover:bg-slate-50/50">
                                 <td class="py-2 px-3 font-mono text-xs text-slate-500">{{ p.code || '—' }}</td>
-                                <td class="py-2 px-3 text-slate-800">{{ p.name }}<span v-if="p.project_type" class="text-xs text-slate-400"> ({{ p.project_type }})</span></td>
+                                <td class="py-2 px-3 text-slate-800">
+                                    <button @click="openMap(p)" :title="hasLoc(p) ? 'View location' : 'No location set'" class="mr-1 align-middle" :class="hasLoc(p) ? 'text-rose-500 hover:text-rose-600' : 'text-slate-300'">📍</button>
+                                    {{ p.name }}<span v-if="p.project_type" class="text-xs text-slate-400"> ({{ p.project_type }})</span>
+                                </td>
                                 <td class="py-2 px-3 text-slate-600">{{ p.client_name || '—' }}</td>
                                 <td class="py-2 px-3 text-right text-slate-600 whitespace-nowrap border-l border-slate-100">{{ fmt(p.exp_base) }}</td>
                                 <td class="py-2 px-3 text-right text-slate-500 whitespace-nowrap">{{ fmt(p.exp_gst) }}</td>
@@ -141,6 +153,19 @@
                 </div>
             </div>
             </template>
+
+            <!-- Location view modal -->
+            <div v-if="mapModal.open" class="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 px-4 py-6 overflow-y-auto print:hidden">
+                <div class="w-full max-w-2xl bg-white rounded-xl shadow-xl p-6 my-auto">
+                    <div class="flex items-center justify-between mb-4">
+                        <h2 class="font-semibold text-slate-800">📍 {{ mapModal.name }}</h2>
+                        <button @click="mapModal.open=false" class="text-slate-400">✕</button>
+                    </div>
+                    <map-field v-if="mapModal.open && mapModal.coords.lat != null" v-model="mapModal.coords" :editable="false" height="22rem"></map-field>
+                    <p v-else class="text-sm text-slate-400 py-8 text-center">No location has been marked for this project.</p>
+                    <div class="flex justify-end mt-4"><button @click="mapModal.open=false" class="px-4 py-2 text-sm rounded-lg border border-slate-300 text-slate-600">Close</button></div>
+                </div>
+            </div>
         </div>`,
     };
 

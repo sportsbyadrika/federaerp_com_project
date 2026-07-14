@@ -146,6 +146,7 @@ try {
         'tenant_id' => DEMO_ORG, 'client_id' => $clientId, 'estimate_id' => $estId,
         'code' => 'PRJ-0001', 'name' => 'Harbor Villa Construction', 'project_type' => 'new',
         'site_address' => '12 Dockside Ave, Metro City',
+        'latitude' => 9.9312000, 'longitude' => 76.2673000,
         'contract_value' => 500000, 'currency_code' => 'INR', 'currency_symbol' => '₹',
         'start_date' => '2026-01-15', 'end_date' => '2026-12-20',
         'status' => 'active', 'progress_percent' => 35, 'project_manager_id' => $pmId,
