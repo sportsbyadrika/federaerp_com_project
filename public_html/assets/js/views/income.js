@@ -23,6 +23,7 @@
             const projects = ref([]);
             const clients = ref([]);
             const org = ref({});
+            const filterProjectId = ref('');
 
             const fmt = (n) => CSApp.money(n);
             const nf = (n) => new Intl.NumberFormat(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(+n || 0);
@@ -31,11 +32,14 @@
             const showModal = ref(false);
             const editingId = ref(null);
             const form = reactive({
-                project_id: null, client_id: null, amount: 0, gst_percent: 18,
+                project_id: null, client_id: null, amount: 0, gst_percent: 18, total: 0,
                 mode: 'fund_transfer', reference: '', income_date: new Date().toISOString().slice(0, 10), notes: '',
             });
             const gstAmount = computed(() => Math.round((+form.amount || 0) * (+form.gst_percent || 0) / 100 * 100) / 100);
-            const grandTotal = computed(() => Math.round(((+form.amount || 0) + gstAmount.value) * 100) / 100);
+            const round2 = (n) => Math.round((+n || 0) * 100) / 100;
+            // Two-way base <-> total, linked by the GST %.
+            function recalcFromBase() { form.total = round2((+form.amount || 0) * (1 + (+form.gst_percent || 0) / 100)); }
+            function recalcFromTotal() { form.amount = round2((+form.total || 0) / (1 + (+form.gst_percent || 0) / 100)); }
 
             // receipt prompt
             const showReceiptAsk = ref(false);
@@ -49,7 +53,9 @@
             async function load() {
                 loading.value = true;
                 try {
-                    const d = (await api.get('/api/incomes')).data;
+                    let url = '/api/incomes';
+                    if (filterProjectId.value) url += '?project_id=' + encodeURIComponent(filterProjectId.value);
+                    const d = (await api.get(url)).data;
                     rows.value = d.items; total.value = d.total;
                 } catch (e) { CSApp.flash('error', e.message); }
                 finally { loading.value = false; }
@@ -61,13 +67,13 @@
 
             function openAdd() {
                 editingId.value = null;
-                Object.assign(form, { project_id: null, client_id: null, amount: 0, gst_percent: 18, mode: 'fund_transfer', reference: '', income_date: new Date().toISOString().slice(0, 10), notes: '' });
+                Object.assign(form, { project_id: null, client_id: null, amount: 0, gst_percent: 18, total: 0, mode: 'fund_transfer', reference: '', income_date: new Date().toISOString().slice(0, 10), notes: '' });
                 showModal.value = true;
             }
             function openEdit(r) {
                 editingId.value = r.id;
                 Object.assign(form, {
-                    project_id: r.project_id, client_id: r.client_id, amount: +r.amount, gst_percent: +r.gst_percent,
+                    project_id: r.project_id, client_id: r.client_id, amount: +r.amount, gst_percent: +r.gst_percent, total: +r.total_amount,
                     mode: r.mode, reference: r.reference || '', income_date: (r.income_date || '').slice(0, 10), notes: r.notes || '',
                 });
                 showModal.value = true;
@@ -167,8 +173,8 @@
 
             onMounted(async () => { await loadLists(); await load(); });
             return {
-                rows, total, loading, saving, projects, clients, fmt, nf, MODES, modeLabel,
-                showModal, editingId, form, gstAmount, grandTotal, sym,
+                rows, total, loading, saving, projects, clients, filterProjectId, fmt, nf, MODES, modeLabel,
+                showModal, editingId, form, gstAmount, sym, recalcFromBase, recalcFromTotal, load,
                 openAdd, openEdit, save, remove, onProjectChange,
                 showReceiptAsk, receiptRow, askReceipt, printReceipt,
             };
@@ -181,7 +187,14 @@
             </div>
             <p class="text-sm text-slate-500 mb-5">Receipts from customer projects.</p>
 
-            <div class="flex items-center justify-end mb-4">
+            <div class="flex items-center justify-between mb-4 flex-wrap gap-3">
+                <div class="flex items-center gap-2">
+                    <span class="text-xs text-slate-400">Project</span>
+                    <select v-model="filterProjectId" @change="load" class="rounded-lg border border-slate-300 px-2 py-1 text-sm">
+                        <option value="">All projects</option>
+                        <option v-for="p in projects" :key="p.id" :value="p.id">{{ p.name }}</option>
+                    </select>
+                </div>
                 <div class="text-sm text-slate-500">Total received: <span class="font-semibold text-emerald-600">{{ fmt(total) }}</span></div>
             </div>
 
@@ -240,11 +253,15 @@
                         </div>
                         <div>
                             <label class="block text-xs text-slate-500 mb-1">Amount (base)</label>
-                            <input v-model.number="form.amount" type="number" step="0.01" class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm">
+                            <input v-model.number="form.amount" @input="recalcFromBase" type="number" step="0.01" class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm">
                         </div>
                         <div>
                             <label class="block text-xs text-slate-500 mb-1">GST %</label>
-                            <input v-model.number="form.gst_percent" type="number" step="0.01" class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm">
+                            <input v-model.number="form.gst_percent" @input="recalcFromBase" type="number" step="0.01" class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm">
+                        </div>
+                        <div class="sm:col-span-2">
+                            <label class="block text-xs text-slate-500 mb-1">Total Income <span class="text-slate-400">(base + GST — edit either side)</span></label>
+                            <input v-model.number="form.total" @input="recalcFromTotal" type="number" step="0.01" class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm">
                         </div>
                         <div>
                             <label class="block text-xs text-slate-500 mb-1">Mode of payment</label>
@@ -267,7 +284,7 @@
                     </div>
                     <div class="mt-3 rounded-lg bg-slate-50 border border-slate-200 px-4 py-2 text-sm flex justify-between">
                         <span class="text-slate-500">GST: <span class="text-slate-700">{{ sym() }}{{ nf(gstAmount) }}</span></span>
-                        <span class="text-slate-500">Total: <span class="font-semibold text-slate-800">{{ sym() }}{{ nf(grandTotal) }}</span></span>
+                        <span class="text-slate-500">Total: <span class="font-semibold text-slate-800">{{ sym() }}{{ nf(form.total) }}</span></span>
                     </div>
                     <div class="flex justify-end gap-2 mt-5">
                         <button @click="showModal=false" class="px-4 py-2 text-sm rounded-lg border border-slate-300 text-slate-600">Cancel</button>
