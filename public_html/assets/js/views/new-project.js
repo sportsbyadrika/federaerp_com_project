@@ -87,10 +87,13 @@
                 <p class="text-sm text-slate-500">Create a project. Contract value is the base; GST % gives the GST amount and total contract value.</p>
             </div>
 
-            <div class="bg-white rounded-xl border border-slate-200 p-6 max-w-3xl">
-                <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div class="bg-white rounded-xl border border-slate-200 p-6 w-full">
+                <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
                     <div><label class="block text-sm text-slate-600 mb-1">Code</label><input v-model="form.code" placeholder="auto if blank" class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-brand/40 focus:border-brand"></div>
                     <div><label class="block text-sm text-slate-600 mb-1">Project name *</label><input v-model="form.name" placeholder="e.g. Harbor Villa" class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-brand/40 focus:border-brand"></div>
+                    <div><label class="block text-sm text-slate-600 mb-1">Type of project</label>
+                        <select v-model="form.project_type" class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"><option value="new">New</option><option value="renovation">Renovation</option></select>
+                    </div>
 
                     <div class="sm:col-span-2">
                         <label class="block text-sm text-slate-600 mb-1">Client</label>
@@ -102,10 +105,6 @@
                             <button type="button" @click="openClient" class="px-3 py-2 text-sm rounded-lg border border-slate-300 text-brand hover:bg-brand/5 whitespace-nowrap">+ Add client</button>
                         </div>
                     </div>
-
-                    <div><label class="block text-sm text-slate-600 mb-1">Type of project</label>
-                        <select v-model="form.project_type" class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"><option value="new">New</option><option value="renovation">Renovation</option></select>
-                    </div>
                     <div><label class="block text-sm text-slate-600 mb-1">Currency</label>
                         <select v-model="form.currency_code" @change="onCurrencyChange" class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm">
                             <option v-for="c in currencies" :key="c.code" :value="c.code">{{ c.code }} ({{ c.symbol }})</option>
@@ -114,8 +113,8 @@
 
                     <div><label class="block text-sm text-slate-600 mb-1">Contract value (base)</label><input v-model.number="form.contract_value" @input="recalcFromBase" type="number" step="0.01" class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-brand/40 focus:border-brand"></div>
                     <div><label class="block text-sm text-slate-600 mb-1">GST %</label><input v-model.number="form.contract_gst_percent" @input="recalcFromBase" type="number" step="0.01" class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-brand/40 focus:border-brand"></div>
-                    <div class="sm:col-span-2"><label class="block text-sm text-slate-600 mb-1">Total contract value <span class="text-slate-400">(base + GST — edit either side)</span></label><input v-model.number="form.contract_total" @input="recalcFromTotal" type="number" step="0.01" class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-brand/40 focus:border-brand"></div>
-                    <div class="sm:col-span-2 -mt-1 rounded-lg bg-slate-50 border border-slate-200 px-4 py-2 text-sm flex justify-between">
+                    <div><label class="block text-sm text-slate-600 mb-1">Total contract value <span class="text-slate-400">(base + GST)</span></label><input v-model.number="form.contract_total" @input="recalcFromTotal" type="number" step="0.01" class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-brand/40 focus:border-brand"></div>
+                    <div class="sm:col-span-2 lg:col-span-3 -mt-1 rounded-lg bg-slate-50 border border-slate-200 px-4 py-2 text-sm flex justify-between">
                         <span class="text-slate-500">GST value: <span class="text-slate-700">{{ sym() }}{{ nf(gstAmount) }}</span></span>
                         <span class="text-slate-500">Total contract value: <span class="font-semibold text-slate-800">{{ sym() }}{{ nf(form.contract_total) }}</span></span>
                     </div>
@@ -124,10 +123,11 @@
                     <div><label class="block text-sm text-slate-600 mb-1">Status</label>
                         <select v-model="form.status" class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"><option value="planning">Planning</option><option value="active">Active</option><option value="on_hold">On hold</option><option value="completed">Completed</option></select>
                     </div>
-                    <div></div>
+
                     <div><label class="block text-sm text-slate-600 mb-1">Start date</label><input v-model="form.start_date" type="date" class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"></div>
                     <div><label class="block text-sm text-slate-600 mb-1">Target end date</label><input v-model="form.end_date" type="date" class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"></div>
-                    <div class="sm:col-span-2"><label class="block text-sm text-slate-600 mb-1">Description</label><textarea v-model="form.description" rows="3" class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-brand/40 focus:border-brand"></textarea></div>
+                    <div class="hidden lg:block"></div>
+                    <div class="sm:col-span-2 lg:col-span-3"><label class="block text-sm text-slate-600 mb-1">Description</label><textarea v-model="form.description" rows="3" class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-brand/40 focus:border-brand"></textarea></div>
                 </div>
                 <div class="flex justify-end gap-2 mt-5">
                     <a href="#/projects" class="px-4 py-2 text-sm rounded-lg border border-slate-300 text-slate-600">Cancel</a>
