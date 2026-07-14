@@ -36,7 +36,8 @@ final class ProjectService extends BaseService
         ]);
         $this->projects = new GenericModel('projects', [
             'tenant_id', 'client_id', 'estimate_id', 'code', 'name', 'project_type', 'description', 'site_address',
-            'contract_value', 'currency_code', 'currency_symbol', 'start_date', 'end_date', 'status', 'progress_percent', 'project_manager_id',
+            'contract_value', 'contract_gst_percent', 'contract_gst_amount', 'contract_total',
+            'currency_code', 'currency_symbol', 'start_date', 'end_date', 'status', 'progress_percent', 'project_manager_id',
         ], softDelete: true);
         $this->stages = new GenericModel('construction_stages', ['tenant_id', 'project_id', 'phase_no', 'details', 'percentage', 'amount', 'sort_order']);
         $this->floors = new GenericModel('project_floors', ['tenant_id', 'project_id', 'code', 'label', 'sort_order']);
@@ -65,7 +66,7 @@ final class ProjectService extends BaseService
     public function financialSummary(int $tenantId): array
     {
         $rows = Database::instance()->fetchAll(
-            'SELECT p.id, p.code, p.name, p.project_type, p.status, c.name AS client_name,
+            'SELECT p.id, p.code, p.name, p.project_type, p.status, p.client_id, c.name AS client_name,
                     COALESCE(e.base,0)  AS exp_base,  COALESCE(e.gst,0)  AS exp_gst,  COALESCE(e.total,0)  AS exp_total,
                     COALESCE(i.base,0)  AS inc_base,  COALESCE(i.gst,0)  AS inc_gst,  COALESCE(i.total,0)  AS inc_total
                FROM projects p
@@ -103,22 +104,30 @@ final class ProjectService extends BaseService
     {
         // Default the project currency to the organisation's default.
         $org = Database::instance()->fetch('SELECT currency, currency_symbol FROM organisations WHERE id = :t', [':t' => $tenantId]);
+        $base = round((float)($input['contract_value'] ?? 0), 2);
+        $pct = round((float)($input['contract_gst_percent'] ?? 0), 3);
+        $gst = round($base * $pct / 100, 2);
+        $projectType = $input['project_type'] ?? 'new';
+        if (!in_array($projectType, ['new', 'renovation'], true)) $projectType = 'new';
         $id = $this->projects->create([
-            'tenant_id'          => $tenantId,
-            'client_id'          => $input['client_id'] ?? null,
-            'estimate_id'        => $input['estimate_id'] ?? null,
-            'code'               => $input['code'] ?? $this->nextCode($tenantId),
-            'name'               => (string)$input['name'],
-            'currency_code'      => $input['currency_code'] ?? ($org['currency'] ?? 'USD'),
-            'currency_symbol'    => $input['currency_symbol'] ?? ($org['currency_symbol'] ?? '$'),
-            'project_type'       => in_array(($input['project_type'] ?? 'new'), ['new', 'renovation'], true) ? $input['project_type'] : 'new',
-            'description'        => $input['description'] ?? null,
-            'site_address'       => $input['site_address'] ?? null,
-            'contract_value'     => $input['contract_value'] ?? 0,
-            'start_date'         => $input['start_date'] ?? null,
-            'end_date'           => $input['end_date'] ?? null,
-            'status'             => $input['status'] ?? 'planning',
-            'project_manager_id' => $input['project_manager_id'] ?? null,
+            'tenant_id'            => $tenantId,
+            'client_id'            => $input['client_id'] ?? null,
+            'estimate_id'          => $input['estimate_id'] ?? null,
+            'code'                 => $input['code'] ?? $this->nextCode($tenantId),
+            'name'                 => (string)$input['name'],
+            'currency_code'        => $input['currency_code'] ?? ($org['currency'] ?? 'USD'),
+            'currency_symbol'      => $input['currency_symbol'] ?? ($org['currency_symbol'] ?? '$'),
+            'project_type'         => $projectType,
+            'description'          => $input['description'] ?? null,
+            'site_address'         => $input['site_address'] ?? null,
+            'contract_value'       => $base,
+            'contract_gst_percent' => $pct,
+            'contract_gst_amount'  => $gst,
+            'contract_total'       => round($base + $gst, 2),
+            'start_date'           => $input['start_date'] ?? null,
+            'end_date'             => $input['end_date'] ?? null,
+            'status'               => $input['status'] ?? 'planning',
+            'project_manager_id'   => $input['project_manager_id'] ?? null,
         ]);
         $this->seedDefaultBoard($tenantId, $id);
         return $this->projects->findOrFail($id, $tenantId);
@@ -126,7 +135,17 @@ final class ProjectService extends BaseService
 
     public function updateProject(int $tenantId, int $id, array $input): array
     {
-        $this->projects->findOrFail($id, $tenantId);
+        $existing = $this->projects->findOrFail($id, $tenantId);
+        // Recompute the contract GST/total when the base or % is being changed.
+        if (array_key_exists('contract_value', $input) || array_key_exists('contract_gst_percent', $input)) {
+            $base = round((float)($input['contract_value'] ?? $existing['contract_value']), 2);
+            $pct = round((float)($input['contract_gst_percent'] ?? $existing['contract_gst_percent']), 3);
+            $gst = round($base * $pct / 100, 2);
+            $input['contract_value'] = $base;
+            $input['contract_gst_percent'] = $pct;
+            $input['contract_gst_amount'] = $gst;
+            $input['contract_total'] = round($base + $gst, 2);
+        }
         $this->projects->update($id, $tenantId, $input);
         return $this->projects->findOrFail($id, $tenantId);
     }

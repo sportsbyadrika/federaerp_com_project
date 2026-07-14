@@ -328,6 +328,16 @@ check('staff: tenant-scoped CRUD via master resource', function () use ($db) {
     try { $m->findOrFail($id, DEMO); return false; } catch (ServiceException $e) { /* soft-deleted */ }
     try { $m->findOrFail(999999, DEMO); return false; } catch (ServiceException $e) { return $e->code() === 'not_found'; }
 });
+check('projects: contract GST computed on create + update', function () use ($db) {
+    $svc = new \App\Services\ProjectService();
+    $p = $svc->createProject(DEMO, ['name' => 'GST Contract Test', 'contract_value' => 500000, 'contract_gst_percent' => 18]);
+    if (abs((float)$p['contract_gst_amount'] - 90000.00) > 0.01 || abs((float)$p['contract_total'] - 590000.00) > 0.01) return false;
+    // Changing only the % recomputes the GST amount + total from the stored base.
+    $u = $svc->updateProject(DEMO, (int)$p['id'], ['contract_gst_percent' => 5]);
+    if (abs((float)$u['contract_gst_amount'] - 25000.00) > 0.01 || abs((float)$u['contract_total'] - 525000.00) > 0.01) return false;
+    $svc->deleteProject(DEMO, (int)$p['id']);
+    return true;
+});
 check('projects: financial summary rolls up income/expense per project + totals', function () use ($db, $projectId) {
     $svc = new \App\Services\ProjectService();
     $sum = $svc->financialSummary(DEMO);
