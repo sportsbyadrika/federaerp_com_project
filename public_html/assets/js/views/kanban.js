@@ -56,7 +56,13 @@
                     try { staff.value = (await api.get('/api/auth/staff')).data; } catch (e) {}
                     try { materialsCatalog.value = (await api.get('/api/materials')).data; } catch (e) {}
                     try { employees.value = (await api.get('/api/employees')).data; } catch (e) {}
-                    if (projects.value.length) { activeId.value = projects.value[0].id; await loadBoard(); }
+                    if (projects.value.length) {
+                        // Prefer the project id from the route (#/board/:id), else the first.
+                        const routeId = parseInt(store.params.id, 10);
+                        const match = projects.value.find(p => p.id === routeId);
+                        activeId.value = match ? match.id : projects.value[0].id;
+                        await loadBoard();
+                    }
                 } catch (e) { CSApp.flash('error', e.message); }
                 finally { loading.value = false; }
             }
@@ -502,5 +508,6 @@
         </div>`,
     };
 
-    CSApp.route('/projects', 'ProjectsView', ProjectsView);
+    CSApp.route('/board/:id', 'ProjectsView', ProjectsView);
+    CSApp.route('/board', 'ProjectsView', ProjectsView);
 })();

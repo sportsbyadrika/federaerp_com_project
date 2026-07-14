@@ -127,7 +127,19 @@
                 catch (e) { CSApp.flash('error', e.message); }
             }
 
-            onMounted(async () => { await loadLists(); await load(); });
+            onMounted(async () => {
+                await loadLists();
+                const q = store.query || {};
+                if (q.project_id) filterProjectId.value = +q.project_id;
+                await load();
+                // Arriving from the projects list "+ Expenditure" action.
+                if (q.add && q.project_id) {
+                    openAdd();
+                    form.scope = 'project';
+                    form.project_id = +q.project_id;
+                    onProjectChange();
+                }
+            });
             return {
                 rows, total, gstTotal, baseTotal, loading, saving, filterScope, filterProjectId, projects, types, tasks, fmt, nf, sym, MODES, modeLabel,
                 showModal, editingId, form, partyOptions, gstAmount, recalcFromBase, recalcFromTotal, load, openAdd, openEdit, save, remove,

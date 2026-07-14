@@ -18,6 +18,8 @@
         setup() {
             const rows = ref([]);
             const total = ref(0);
+            const gstTotal = ref(0);
+            const baseTotal = ref(0);
             const loading = ref(true);
             const saving = ref(false);
             const projects = ref([]);
@@ -56,7 +58,7 @@
                     let url = '/api/incomes';
                     if (filterProjectId.value) url += '?project_id=' + encodeURIComponent(filterProjectId.value);
                     const d = (await api.get(url)).data;
-                    rows.value = d.items; total.value = d.total;
+                    rows.value = d.items; total.value = d.total; gstTotal.value = d.gst || 0; baseTotal.value = d.base || 0;
                 } catch (e) { CSApp.flash('error', e.message); }
                 finally { loading.value = false; }
             }
@@ -171,9 +173,20 @@
                     '</div></body></html>';
             }
 
-            onMounted(async () => { await loadLists(); await load(); });
+            onMounted(async () => {
+                await loadLists();
+                const q = store.query || {};
+                if (q.project_id) filterProjectId.value = +q.project_id;
+                await load();
+                // Arriving from the projects list "+ Income" action.
+                if (q.add && q.project_id) {
+                    openAdd();
+                    form.project_id = +q.project_id;
+                    onProjectChange();
+                }
+            });
             return {
-                rows, total, loading, saving, projects, clients, filterProjectId, fmt, nf, MODES, modeLabel,
+                rows, total, gstTotal, baseTotal, loading, saving, projects, clients, filterProjectId, fmt, nf, MODES, modeLabel,
                 showModal, editingId, form, gstAmount, sym, recalcFromBase, recalcFromTotal, load,
                 openAdd, openEdit, save, remove, onProjectChange,
                 showReceiptAsk, receiptRow, askReceipt, printReceipt,
@@ -195,7 +208,13 @@
                         <option v-for="p in projects" :key="p.id" :value="p.id">{{ p.name }}</option>
                     </select>
                 </div>
-                <div class="text-sm text-slate-500">Total received: <span class="font-semibold text-emerald-600">{{ fmt(total) }}</span></div>
+                <div class="text-sm text-slate-500 text-right">
+                    <span>Base: <span class="text-slate-700">{{ fmt(baseTotal) }}</span></span>
+                    <span class="mx-1 text-slate-300">·</span>
+                    <span>GST: <span class="text-slate-700">{{ fmt(gstTotal) }}</span></span>
+                    <span class="mx-1 text-slate-300">·</span>
+                    <span>Total: <span class="font-semibold text-emerald-600">{{ fmt(total) }}</span></span>
+                </div>
             </div>
 
             <div class="bg-white rounded-xl border border-slate-200 p-5">

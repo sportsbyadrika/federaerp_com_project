@@ -36,9 +36,13 @@ final class IncomeService extends BaseService
               ORDER BY i.income_date DESC, i.id DESC',
             $params
         );
-        $total = 0.0;
-        foreach ($rows as $r) { $total += (float)$r['total_amount']; }
-        return ['items' => $rows, 'total' => round($total, 2)];
+        $base = 0.0; $gst = 0.0; $total = 0.0;
+        foreach ($rows as $r) {
+            $base += (float)$r['amount'];
+            $gst += (float)$r['gst_amount'];
+            $total += (float)$r['total_amount'];
+        }
+        return ['items' => $rows, 'base' => round($base, 2), 'gst' => round($gst, 2), 'total' => round($total, 2)];
     }
 
     public function get(int $tenantId, int $id): array

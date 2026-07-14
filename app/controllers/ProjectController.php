@@ -22,6 +22,12 @@ final class ProjectController extends Controller
         $this->guard(fn() => Response::success($this->service->listProjects((int)$request->tenantId())));
     }
 
+    /** GET /api/project-financials — per-project income/expense rollup + totals. */
+    public function financials(Request $request): void
+    {
+        $this->guard(fn() => Response::success($this->service->financialSummary((int)$request->tenantId())));
+    }
+
     public function show(Request $request): void
     {
         $this->guard(fn() => Response::success($this->service->getProject((int)$request->tenantId(), (int)$request->param('id'))));

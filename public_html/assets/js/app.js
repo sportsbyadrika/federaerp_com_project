@@ -319,6 +319,22 @@
                     </div>
                     <div class="bg-white rounded-xl border border-slate-200 p-5"><div class="text-3xl font-semibold text-slate-800">{{ data.metrics.fleet.in_use }}/{{ data.metrics.fleet.total }}</div><div class="text-sm text-slate-500 mt-1">Fleet in use</div></div>
                 </div>
+
+                <!-- Directory: clients / suppliers / sub-contractors (click through to Setup) -->
+                <div v-if="data.metrics.directory" class="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                    <a href="#/setup?tab=clients" class="bg-white rounded-xl border border-slate-200 p-5 flex items-center gap-4 hover:shadow hover:border-brand/40 transition">
+                        <span class="inline-flex h-11 w-11 items-center justify-center rounded-xl bg-sky-50 text-sky-600 text-xl">👥</span>
+                        <div><div class="text-2xl font-semibold text-slate-800">{{ data.metrics.directory.clients }}</div><div class="text-sm text-slate-500">Clients</div></div>
+                    </a>
+                    <a href="#/setup?tab=suppliers" class="bg-white rounded-xl border border-slate-200 p-5 flex items-center gap-4 hover:shadow hover:border-brand/40 transition">
+                        <span class="inline-flex h-11 w-11 items-center justify-center rounded-xl bg-amber-50 text-amber-600 text-xl">🏭</span>
+                        <div><div class="text-2xl font-semibold text-slate-800">{{ data.metrics.directory.suppliers }}</div><div class="text-sm text-slate-500">Suppliers</div></div>
+                    </a>
+                    <a href="#/setup?tab=subcontractors" class="bg-white rounded-xl border border-slate-200 p-5 flex items-center gap-4 hover:shadow hover:border-brand/40 transition">
+                        <span class="inline-flex h-11 w-11 items-center justify-center rounded-xl bg-violet-50 text-violet-600 text-xl">🛠️</span>
+                        <div><div class="text-2xl font-semibold text-slate-800">{{ data.metrics.directory.subcontractors }}</div><div class="text-sm text-slate-500">Sub-contractors</div></div>
+                    </a>
+                </div>
                 <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
                     <div class="bg-white rounded-xl border border-slate-200 p-5">
                         <h2 class="font-medium text-slate-700 mb-3">Weekly project progress</h2>

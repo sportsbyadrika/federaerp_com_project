@@ -35,6 +35,7 @@ return function (Router $router, array $auth, array $write): void {
 
         // ---- Projects -----------------------------------------------------
         $r->get('/projects', 'ProjectController@index', $auth);
+        $r->get('/project-financials', 'ProjectController@financials', $auth);
         $r->get('/projects/{id}', 'ProjectController@show', $auth);
         $r->post('/projects', 'ProjectController@store', $write);
         $r->put('/projects/{id}', 'ProjectController@update', $write);
