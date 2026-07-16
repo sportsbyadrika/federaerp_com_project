@@ -313,9 +313,9 @@
                         <div class="text-xs text-slate-400 mt-1">GST {{ fmt(data.metrics.finance.income.gst) }} · Total {{ fmt(data.metrics.finance.income.total) }}</div>
                     </div>
                     <div class="bg-white rounded-xl border border-slate-200 p-5">
-                        <div class="text-3xl font-semibold text-rose-600">{{ fmt(data.metrics.finance.expense.base) }}</div>
-                        <div class="text-sm text-slate-500 mt-1">Expense (base)</div>
-                        <div class="text-xs text-slate-400 mt-1">GST {{ fmt(data.metrics.finance.expense.gst) }} · Total {{ fmt(data.metrics.finance.expense.total) }}</div>
+                        <div class="text-3xl font-semibold text-rose-600">{{ fmt(data.metrics.finance.expense.total) }}</div>
+                        <div class="text-sm text-slate-500 mt-1">Expense (total)</div>
+                        <div class="text-xs text-slate-400 mt-1">Base {{ fmt(data.metrics.finance.expense.base) }} · GST {{ fmt(data.metrics.finance.expense.gst) }}</div>
                     </div>
                     <div class="bg-white rounded-xl border border-slate-200 p-5"><div class="text-3xl font-semibold text-slate-800">{{ data.metrics.fleet.in_use }}/{{ data.metrics.fleet.total }}</div><div class="text-sm text-slate-500 mt-1">Fleet in use</div></div>
                 </div>

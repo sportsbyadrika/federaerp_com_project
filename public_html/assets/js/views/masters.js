@@ -92,6 +92,17 @@
                 { key: 'gst_number', label: 'GST number', type: 'text' }, { key: 'pan', label: 'PAN', type: 'text' },
             ],
         },
+        'bank-accounts': {
+            label: 'Bank Accounts', endpoint: '/api/bank-accounts',
+            columns: [{ key: 'account_label', label: 'Label' }, { key: 'bank_name', label: 'Bank' }, { key: 'account_number', label: 'Account no.' }, { key: 'ifsc', label: 'IFSC' }, { key: 'branch_name', label: 'Branch' }],
+            fields: [
+                { key: 'account_label', label: 'Account label', type: 'text', required: true, placeholder: 'shown in dropdowns, e.g. Main Current A/c' },
+                { key: 'bank_name', label: 'Bank name', type: 'text', required: true },
+                { key: 'account_number', label: 'Account number', type: 'text', required: true },
+                { key: 'ifsc', label: 'IFSC', type: 'text' },
+                { key: 'branch_name', label: 'Branch name', type: 'text' },
+            ],
+        },
         'materials': {
             label: 'Materials', endpoint: '/api/materials',
             columns: [{ key: 'code', label: 'Code' }, { key: 'name', label: 'Name' }, { key: 'unit', label: 'Unit' }, { key: 'unit_price', label: 'Unit price' }, { key: 'reorder_level', label: 'Reorder level' }],

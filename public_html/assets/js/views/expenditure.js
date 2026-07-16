@@ -28,6 +28,8 @@
             const types = ref([]);
             const suppliers = ref([]);
             const subcontractors = ref([]);
+            const staff = ref([]);
+            const banks = ref([]);
             const tasks = ref([]);      // tasks for the currently selected project (in the modal)
 
             const fmt = (n) => CSApp.money(n);
@@ -40,21 +42,24 @@
             const form = reactive({
                 scope: 'project', project_id: null, expenditure_type_id: null,
                 party_type: 'none', party_id: null, task_id: null,
-                amount: 0, gst_percent: 0, total: 0, mode: 'cash', reference: '', expense_date: new Date().toISOString().slice(0, 10), notes: '',
+                amount: 0, gst_percent: 0, total: 0, mode: 'cash', bank_account_id: null, reference: '', expense_date: new Date().toISOString().slice(0, 10), notes: '',
             });
+            const needsBank = computed(() => ['fund_transfer', 'cheque', 'dd'].includes(form.mode));
             const round2 = (n) => Math.round((+n || 0) * 100) / 100;
             const gstAmount = computed(() => round2((+form.amount || 0) * (+form.gst_percent || 0) / 100));
             // Two-way base <-> total, linked by GST %.
             function recalcFromBase() { form.total = round2((+form.amount || 0) * (1 + (+form.gst_percent || 0) / 100)); }
             function recalcFromTotal() { form.amount = round2((+form.total || 0) / (1 + (+form.gst_percent || 0) / 100)); }
 
-            const partyOptions = computed(() => form.party_type === 'supplier' ? suppliers.value : (form.party_type === 'subcontractor' ? subcontractors.value : []));
+            const partyOptions = computed(() => form.party_type === 'supplier' ? suppliers.value : (form.party_type === 'subcontractor' ? subcontractors.value : (form.party_type === 'staff' ? staff.value : [])));
 
             async function loadLists() {
                 try { projects.value = (await api.get('/api/projects')).data; } catch (e) { projects.value = []; }
                 try { types.value = (await api.get('/api/expenditure-types')).data; } catch (e) { types.value = []; }
                 try { suppliers.value = (await api.get('/api/suppliers')).data; } catch (e) { suppliers.value = []; }
                 try { subcontractors.value = (await api.get('/api/subcontractors')).data; } catch (e) { subcontractors.value = []; }
+                try { staff.value = (await api.get('/api/staff')).data; } catch (e) { staff.value = []; }
+                try { banks.value = (await api.get('/api/bank-accounts')).data; } catch (e) { banks.value = []; }
             }
             async function load() {
                 loading.value = true;
@@ -83,7 +88,7 @@
                 Object.assign(form, {
                     scope: 'project', project_id: null, expenditure_type_id: null,
                     party_type: 'none', party_id: null, task_id: null,
-                    amount: 0, gst_percent: 0, total: 0, mode: 'cash', reference: '', expense_date: new Date().toISOString().slice(0, 10), notes: '',
+                    amount: 0, gst_percent: 0, total: 0, mode: 'cash', bank_account_id: null, reference: '', expense_date: new Date().toISOString().slice(0, 10), notes: '',
                 });
                 tasks.value = [];
                 showModal.value = true;
@@ -94,7 +99,7 @@
                     scope: r.scope, project_id: r.project_id, expenditure_type_id: r.expenditure_type_id,
                     party_type: r.party_type, party_id: r.party_id, task_id: r.task_id,
                     amount: +r.amount, gst_percent: +r.gst_percent, total: +r.total_amount,
-                    mode: r.mode, reference: r.reference || '', expense_date: (r.expense_date || '').slice(0, 10), notes: r.notes || '',
+                    mode: r.mode, bank_account_id: r.bank_account_id || null, reference: r.reference || '', expense_date: (r.expense_date || '').slice(0, 10), notes: r.notes || '',
                 });
                 await loadTasks();
                 showModal.value = true;
@@ -112,7 +117,8 @@
                         party_id: form.party_type === 'none' ? null : (form.party_id || null),
                         task_id: form.scope === 'project' ? (form.task_id || null) : null,
                         amount: +form.amount, gst_percent: +form.gst_percent || 0,
-                        mode: form.mode, reference: form.reference,
+                        mode: form.mode, bank_account_id: needsBank.value ? (form.bank_account_id || null) : null,
+                        reference: form.reference,
                         expense_date: form.expense_date, notes: form.notes,
                     };
                     if (editingId.value) await api.put('/api/expenditures/' + editingId.value, payload);
@@ -141,7 +147,7 @@
                 }
             });
             return {
-                rows, total, gstTotal, baseTotal, loading, saving, filterScope, filterProjectId, projects, types, tasks, fmt, nf, sym, MODES, modeLabel,
+                rows, total, gstTotal, baseTotal, loading, saving, filterScope, filterProjectId, projects, types, tasks, banks, needsBank, fmt, nf, sym, MODES, modeLabel,
                 showModal, editingId, form, partyOptions, gstAmount, recalcFromBase, recalcFromTotal, load, openAdd, openEdit, save, remove,
                 onScopeChange, onProjectChange, onPartyTypeChange,
             };
@@ -186,7 +192,7 @@
                         <thead><tr class="text-left text-slate-400 border-b border-slate-100">
                             <th class="py-2 px-3">Date</th><th class="py-2 px-3">Scope</th><th class="py-2 px-3">Project</th>
                             <th class="py-2 px-3">Type</th><th class="py-2 px-3">Party</th><th class="py-2 px-3">Task</th>
-                            <th class="py-2 px-3 text-right">Base</th><th class="py-2 px-3 text-right">GST</th><th class="py-2 px-3 text-right">Total</th><th class="py-2 px-3">Mode</th><th class="py-2 px-3"></th>
+                            <th class="py-2 px-3 text-right">Base</th><th class="py-2 px-3 text-right">GST</th><th class="py-2 px-3 text-right">Total</th><th class="py-2 px-3">Mode</th><th class="py-2 px-3">Bank</th><th class="py-2 px-3"></th>
                         </tr></thead>
                         <tbody>
                             <tr v-for="r in rows" :key="r.id" class="border-b border-slate-50">
@@ -194,18 +200,19 @@
                                 <td class="py-2 px-3"><span class="px-2 py-0.5 rounded-full text-xs" :class="r.scope==='project'?'bg-sky-50 text-sky-700':'bg-violet-50 text-violet-700'">{{ r.scope }}</span></td>
                                 <td class="py-2 px-3 text-slate-700">{{ r.project_name || '—' }}</td>
                                 <td class="py-2 px-3 text-slate-700">{{ r.type_name || '—' }}</td>
-                                <td class="py-2 px-3 text-slate-700">{{ r.party_name || '—' }}</td>
+                                <td class="py-2 px-3 text-slate-700">{{ r.party_name || '—' }}<span v-if="r.party_type && r.party_type!=='none'" class="block text-[11px] text-slate-400 capitalize">{{ r.party_type }}</span></td>
                                 <td class="py-2 px-3 text-slate-600">{{ r.task_title || '—' }}</td>
                                 <td class="py-2 px-3 text-right text-slate-600 whitespace-nowrap">{{ fmt(r.amount) }}</td>
                                 <td class="py-2 px-3 text-right text-slate-500 whitespace-nowrap">{{ fmt(r.gst_amount) }}</td>
                                 <td class="py-2 px-3 text-right font-medium text-slate-800 whitespace-nowrap">{{ fmt(r.total_amount) }}</td>
                                 <td class="py-2 px-3 text-slate-600 whitespace-nowrap">{{ modeLabel(r.mode) }}</td>
+                                <td class="py-2 px-3 text-slate-600 whitespace-nowrap">{{ r.bank_label || '—' }}</td>
                                 <td class="py-2 px-3 text-right whitespace-nowrap">
                                     <button @click="openEdit(r)" class="text-brand hover:underline text-xs mr-2">Edit</button>
                                     <button @click="remove(r)" class="text-rose-400 hover:text-rose-600 text-xs">Delete</button>
                                 </td>
                             </tr>
-                            <tr v-if="!rows.length"><td colspan="11" class="py-8 text-center text-slate-400">No expenditure yet — click “+ Add expenditure”.</td></tr>
+                            <tr v-if="!rows.length"><td colspan="12" class="py-8 text-center text-slate-400">No expenditure yet — click “+ Add expenditure”.</td></tr>
                         </tbody>
                     </table>
                 </div>
@@ -242,11 +249,11 @@
                         <div>
                             <label class="block text-xs text-slate-500 mb-1">Party type</label>
                             <select v-model="form.party_type" @change="onPartyTypeChange" class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm">
-                                <option value="none">None</option><option value="supplier">Supplier</option><option value="subcontractor">Sub-contractor</option>
+                                <option value="none">None</option><option value="supplier">Supplier</option><option value="subcontractor">Sub-contractor</option><option value="staff">Staff</option>
                             </select>
                         </div>
                         <div v-if="form.party_type!=='none'">
-                            <label class="block text-xs text-slate-500 mb-1">{{ form.party_type==='supplier' ? 'Supplier' : 'Sub-contractor' }}</label>
+                            <label class="block text-xs text-slate-500 mb-1">{{ form.party_type==='supplier' ? 'Supplier' : (form.party_type==='subcontractor' ? 'Sub-contractor' : 'Staff') }}</label>
                             <select v-model="form.party_id" class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm">
                                 <option :value="null">— select —</option>
                                 <option v-for="p in partyOptions" :key="p.id" :value="p.id">{{ p.name }}</option>
@@ -275,6 +282,13 @@
                             <label class="block text-xs text-slate-500 mb-1">Mode of payment</label>
                             <select v-model="form.mode" class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm">
                                 <option v-for="m in MODES" :key="m.v" :value="m.v">{{ m.l }}</option>
+                            </select>
+                        </div>
+                        <div v-if="needsBank">
+                            <label class="block text-xs text-slate-500 mb-1">Bank account</label>
+                            <select v-model="form.bank_account_id" class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm">
+                                <option :value="null">— select —</option>
+                                <option v-for="b in banks" :key="b.id" :value="b.id">{{ b.account_label }}</option>
                             </select>
                         </div>
                         <div>
