@@ -388,6 +388,17 @@ check('expenditure: staff party type + bank account link (non-cash only)', funct
     $svc->delete(DEMO, (int)$r['id']);
     return true;
 });
+check('validator: string max sizes by length, not numeric value', function () {
+    // A purely numeric account number under the length cap must pass.
+    $ok = \Core\Validator::make(['account_number' => '123456789012'], ['account_number' => 'required|string|max:60']);
+    if (!$ok->passes()) return false;
+    // Over the length cap must fail (as characters, not numeric magnitude).
+    $tooLong = \Core\Validator::make(['account_number' => str_repeat('9', 61)], ['account_number' => 'required|string|max:60']);
+    if ($tooLong->passes()) return false;
+    // A plain numeric rule still bounds by magnitude.
+    $numeric = \Core\Validator::make(['n' => '80'], ['n' => 'numeric|max:60']);
+    return !$numeric->passes();
+});
 check('salary slips: earnings/deductions totals, gross + net; cross-tenant blocked', function () use ($db) {
     $svc = new \App\Services\SalarySlipService();
     $staffId = (int)$db->fetchColumn('SELECT id FROM staff_members WHERE tenant_id=? LIMIT 1', [DEMO]);
