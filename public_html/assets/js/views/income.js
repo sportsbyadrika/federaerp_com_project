@@ -31,12 +31,14 @@
             const nf = (n) => new Intl.NumberFormat(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(+n || 0);
             const sym = () => (store.currency && store.currency.symbol) || '';
 
+            const banks = ref([]);
             const showModal = ref(false);
             const editingId = ref(null);
             const form = reactive({
                 project_id: null, client_id: null, amount: 0, gst_percent: 18, total: 0,
-                mode: 'fund_transfer', reference: '', income_date: new Date().toISOString().slice(0, 10), notes: '',
+                mode: 'fund_transfer', bank_account_id: null, reference: '', income_date: new Date().toISOString().slice(0, 10), notes: '',
             });
+            const needsBank = computed(() => ['fund_transfer', 'cheque', 'dd'].includes(form.mode));
             const gstAmount = computed(() => Math.round((+form.amount || 0) * (+form.gst_percent || 0) / 100 * 100) / 100);
             const round2 = (n) => Math.round((+n || 0) * 100) / 100;
             // Two-way base <-> total, linked by the GST %.
@@ -50,6 +52,7 @@
             async function loadLists() {
                 try { projects.value = (await api.get('/api/projects')).data; } catch (e) { projects.value = []; }
                 try { clients.value = (await api.get('/api/clients')).data; } catch (e) { clients.value = []; }
+                try { banks.value = (await api.get('/api/bank-accounts')).data; } catch (e) { banks.value = []; }
                 try { org.value = (await api.get('/api/organisation')).data; } catch (e) { org.value = {}; }
             }
             async function load() {
@@ -69,14 +72,14 @@
 
             function openAdd() {
                 editingId.value = null;
-                Object.assign(form, { project_id: null, client_id: null, amount: 0, gst_percent: 18, total: 0, mode: 'fund_transfer', reference: '', income_date: new Date().toISOString().slice(0, 10), notes: '' });
+                Object.assign(form, { project_id: null, client_id: null, amount: 0, gst_percent: 18, total: 0, mode: 'fund_transfer', bank_account_id: null, reference: '', income_date: new Date().toISOString().slice(0, 10), notes: '' });
                 showModal.value = true;
             }
             function openEdit(r) {
                 editingId.value = r.id;
                 Object.assign(form, {
                     project_id: r.project_id, client_id: r.client_id, amount: +r.amount, gst_percent: +r.gst_percent, total: +r.total_amount,
-                    mode: r.mode, reference: r.reference || '', income_date: (r.income_date || '').slice(0, 10), notes: r.notes || '',
+                    mode: r.mode, bank_account_id: r.bank_account_id || null, reference: r.reference || '', income_date: (r.income_date || '').slice(0, 10), notes: r.notes || '',
                 });
                 showModal.value = true;
             }
@@ -88,7 +91,8 @@
                     const payload = {
                         project_id: form.project_id, client_id: form.client_id || null,
                         amount: +form.amount, gst_percent: +form.gst_percent || 0,
-                        mode: form.mode, reference: form.reference, income_date: form.income_date, notes: form.notes,
+                        mode: form.mode, bank_account_id: needsBank.value ? (form.bank_account_id || null) : null,
+                        reference: form.reference, income_date: form.income_date, notes: form.notes,
                     };
                     if (editingId.value) await api.put('/api/incomes/' + editingId.value, payload);
                     else await api.post('/api/incomes', payload);
@@ -167,7 +171,7 @@
                     '<table><tbody>' + rowsHtml.join('') +
                     '<tr class="grand"><td>Total received</td><td class="r">' + money(grand) + '</td></tr>' +
                     '</tbody></table>' +
-                    '<div class="note">Payment mode: ' + esc(modeLabel(rec.mode)) + (rec.reference ? ' · Ref: ' + esc(rec.reference) : '') + '</div>' +
+                    '<div class="note">Payment mode: ' + esc(modeLabel(rec.mode)) + (rec.bank_label ? ' · Bank: ' + esc(rec.bank_label) : '') + (rec.reference ? ' · Ref: ' + esc(rec.reference) : '') + '</div>' +
                     (rec.notes ? '<div class="note">' + esc(rec.notes) + '</div>' : '') +
                     '<div class="foot"><div></div><div class="sign">Authorised signatory<br>' + esc(instName) + '</div></div>' +
                     '</div></body></html>';
@@ -186,7 +190,7 @@
                 }
             });
             return {
-                rows, total, gstTotal, baseTotal, loading, saving, projects, clients, filterProjectId, fmt, nf, MODES, modeLabel,
+                rows, total, gstTotal, baseTotal, loading, saving, projects, clients, banks, needsBank, filterProjectId, fmt, nf, MODES, modeLabel,
                 showModal, editingId, form, gstAmount, sym, recalcFromBase, recalcFromTotal, load,
                 openAdd, openEdit, save, remove, onProjectChange,
                 showReceiptAsk, receiptRow, askReceipt, printReceipt,
@@ -224,7 +228,7 @@
                         <thead><tr class="text-left text-slate-400 border-b border-slate-100">
                             <th class="py-2 px-3">Date</th><th class="py-2 px-3">Receipt No.</th><th class="py-2 px-3">Project</th>
                             <th class="py-2 px-3">Client</th><th class="py-2 px-3 text-right">Amount</th><th class="py-2 px-3 text-right">GST</th>
-                            <th class="py-2 px-3 text-right">Total</th><th class="py-2 px-3">Mode</th><th class="py-2 px-3"></th>
+                            <th class="py-2 px-3 text-right">Total</th><th class="py-2 px-3">Mode</th><th class="py-2 px-3">Bank</th><th class="py-2 px-3"></th>
                         </tr></thead>
                         <tbody>
                             <tr v-for="r in rows" :key="r.id" class="border-b border-slate-50">
@@ -236,13 +240,14 @@
                                 <td class="py-2 px-3 text-right text-slate-500 whitespace-nowrap">{{ fmt(r.gst_amount) }}</td>
                                 <td class="py-2 px-3 text-right font-medium text-slate-800 whitespace-nowrap">{{ fmt(r.total_amount) }}</td>
                                 <td class="py-2 px-3 text-slate-600 whitespace-nowrap">{{ modeLabel(r.mode) }}</td>
+                                <td class="py-2 px-3 text-slate-600 whitespace-nowrap">{{ r.bank_label || '—' }}</td>
                                 <td class="py-2 px-3 text-right whitespace-nowrap">
                                     <button @click="askReceipt(r)" class="text-slate-600 hover:underline text-xs mr-2">Receipt</button>
                                     <button @click="openEdit(r)" class="text-brand hover:underline text-xs mr-2">Edit</button>
                                     <button @click="remove(r)" class="text-rose-400 hover:text-rose-600 text-xs">Delete</button>
                                 </td>
                             </tr>
-                            <tr v-if="!rows.length"><td colspan="9" class="py-8 text-center text-slate-400">No income yet — click “+ Add income”.</td></tr>
+                            <tr v-if="!rows.length"><td colspan="10" class="py-8 text-center text-slate-400">No income yet — click “+ Add income”.</td></tr>
                         </tbody>
                     </table>
                 </div>
@@ -286,6 +291,13 @@
                             <label class="block text-xs text-slate-500 mb-1">Mode of payment</label>
                             <select v-model="form.mode" class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm">
                                 <option v-for="m in MODES" :key="m.v" :value="m.v">{{ m.l }}</option>
+                            </select>
+                        </div>
+                        <div v-if="needsBank">
+                            <label class="block text-xs text-slate-500 mb-1">Bank account</label>
+                            <select v-model="form.bank_account_id" class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm">
+                                <option :value="null">— select —</option>
+                                <option v-for="b in banks" :key="b.id" :value="b.id">{{ b.account_label }}</option>
                             </select>
                         </div>
                         <div>

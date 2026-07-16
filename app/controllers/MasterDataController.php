@@ -79,6 +79,11 @@ final class MasterDataController extends Controller
             'fillable' => ['tenant_id','staff_code','name','phone','email','staff_type','address','pan','status'],
             'required' => ['staff_code' => 'required|string|max:40', 'name' => 'required|string|max:160', 'staff_type' => 'required|in:office,skilled,unskilled'],
         ],
+        'bank-accounts' => [
+            'table' => 'bank_accounts', 'soft' => true,
+            'fillable' => ['tenant_id','account_label','bank_name','account_number','ifsc','branch_name','is_active'],
+            'required' => ['account_label' => 'required|string|max:120', 'bank_name' => 'required|string|max:160', 'account_number' => 'required|string|max:60'],
+        ],
     ];
 
     public function index(Request $request): void

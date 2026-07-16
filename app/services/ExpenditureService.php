@@ -20,7 +20,7 @@ final class ExpenditureService extends BaseService
         $this->exp = new GenericModel('expenditures', [
             'tenant_id', 'scope', 'project_id', 'expenditure_type_id', 'party_type', 'party_id',
             'task_id', 'amount', 'gst_percent', 'gst_amount', 'total_amount',
-            'mode', 'reference', 'expense_date', 'notes', 'created_by',
+            'mode', 'bank_account_id', 'reference', 'expense_date', 'notes', 'created_by',
         ]);
     }
 
@@ -33,13 +33,16 @@ final class ExpenditureService extends BaseService
 
         $rows = Database::instance()->fetchAll(
             'SELECT e.*, et.name AS type_name, p.name AS project_name, t.title AS task_title,
-                    CASE e.party_type WHEN \'supplier\' THEN s.name WHEN \'subcontractor\' THEN sc.name ELSE NULL END AS party_name
+                    CASE e.party_type WHEN \'supplier\' THEN s.name WHEN \'subcontractor\' THEN sc.name WHEN \'staff\' THEN st.name ELSE NULL END AS party_name,
+                    ba.account_label AS bank_label
                FROM expenditures e
                LEFT JOIN expenditure_types et ON et.id = e.expenditure_type_id
                LEFT JOIN projects p ON p.id = e.project_id
                LEFT JOIN tasks t ON t.id = e.task_id
                LEFT JOIN suppliers s ON s.id = e.party_id AND e.party_type = \'supplier\'
                LEFT JOIN subcontractors sc ON sc.id = e.party_id AND e.party_type = \'subcontractor\'
+               LEFT JOIN staff_members st ON st.id = e.party_id AND e.party_type = \'staff\'
+               LEFT JOIN bank_accounts ba ON ba.id = e.bank_account_id
               WHERE ' . implode(' AND ', $conds) . '
               ORDER BY e.expense_date DESC, e.id DESC',
             $params
@@ -77,9 +80,12 @@ final class ExpenditureService extends BaseService
         $scope = $in['scope'] ?? 'project';
         if (!in_array($scope, ['project', 'institutional'], true)) $scope = 'project';
         $partyType = $in['party_type'] ?? 'none';
-        if (!in_array($partyType, ['supplier', 'subcontractor', 'none'], true)) $partyType = 'none';
+        if (!in_array($partyType, ['supplier', 'subcontractor', 'staff', 'none'], true)) $partyType = 'none';
         $mode = $in['mode'] ?? 'cash';
         if (!in_array($mode, ['cash', 'fund_transfer', 'cheque', 'dd'], true)) $mode = 'cash';
+        // A bank account only applies to non-cash modes.
+        $bankId = in_array($mode, ['fund_transfer', 'cheque', 'dd'], true) ? ($in['bank_account_id'] ?? null) : null;
+        if ($bankId === '' ) { $bankId = null; }
         $amount = round((float)($in['amount'] ?? 0), 2);
         $gstPct = round((float)($in['gst_percent'] ?? 0), 3);
         $gstAmount = round($amount * $gstPct / 100, 2);
@@ -96,6 +102,7 @@ final class ExpenditureService extends BaseService
             'gst_amount'          => $gstAmount,
             'total_amount'        => round($amount + $gstAmount, 2),
             'mode'                => $mode,
+            'bank_account_id'     => $bankId,
             'reference'           => $in['reference'] ?? null,
             'expense_date'        => $in['expense_date'] ?? date('Y-m-d'),
             'notes'               => $in['notes'] ?? null,
