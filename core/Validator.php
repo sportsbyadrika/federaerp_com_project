@@ -17,6 +17,7 @@ final class Validator
     private array $data;
     private array $rules;
     private array $errors = [];
+    private bool $sizeByLength = false;
 
     public function __construct(array $data, array $rules)
     {
@@ -36,6 +37,9 @@ final class Validator
             $rules = is_array($ruleString) ? $ruleString : explode('|', $ruleString);
             $value = $this->data[$field] ?? null;
             $isNullable = in_array('nullable', $rules, true);
+            // A field declared string/email sizes min/max by character length,
+            // even when its value looks numeric (e.g. an account number).
+            $this->sizeByLength = in_array('string', $rules, true) || in_array('email', $rules, true);
 
             if ($isNullable && ($value === null || $value === '')) {
                 continue;
@@ -127,21 +131,21 @@ final class Validator
                 break;
 
             case 'min':
-                if (is_numeric($value)) {
+                if (is_numeric($value) && !$this->sizeByLength) {
                     if ((float)$value < (float)$arg) {
                         $this->addError($field, "The {$label} must be at least {$arg}.");
                     }
-                } elseif (is_string($value) && mb_strlen($value) < (int)$arg) {
+                } elseif (mb_strlen((string)$value) < (int)$arg) {
                     $this->addError($field, "The {$label} must be at least {$arg} characters.");
                 }
                 break;
 
             case 'max':
-                if (is_numeric($value)) {
+                if (is_numeric($value) && !$this->sizeByLength) {
                     if ((float)$value > (float)$arg) {
                         $this->addError($field, "The {$label} may not be greater than {$arg}.");
                     }
-                } elseif (is_string($value) && mb_strlen($value) > (int)$arg) {
+                } elseif (mb_strlen((string)$value) > (int)$arg) {
                     $this->addError($field, "The {$label} may not exceed {$arg} characters.");
                 }
                 break;
