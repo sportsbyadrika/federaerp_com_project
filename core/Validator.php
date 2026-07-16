@@ -95,7 +95,9 @@ final class Validator
                 break;
 
             case 'string':
-                if ($value !== null && !is_string($value)) {
+                // Accept numeric scalars too (e.g. an all-digit account number
+                // arriving as a JSON number) — they stringify cleanly.
+                if ($value !== null && !is_string($value) && !is_int($value) && !is_float($value)) {
                     $this->addError($field, "The {$label} must be a string.");
                 }
                 break;
