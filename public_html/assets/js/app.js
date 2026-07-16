@@ -246,7 +246,13 @@
             }
             onMounted(load);
             const fmt = (n) => CSApp.money(n);
-            return { loading, error, data, role, fmt };
+            // Balance = base income − total expenditure.
+            const balanceValue = computed(() => {
+                const f = data.value && data.value.metrics && data.value.metrics.finance;
+                if (!f) return 0;
+                return Math.round(((+f.income.base || 0) - (+f.expense.total || 0)) * 100) / 100;
+            });
+            return { loading, error, data, role, fmt, balanceValue };
         },
         template: `
         <div>
@@ -305,8 +311,8 @@
                         </div>
                     </div>
                 </div>
+                <!-- Row 1: Income · Expense · Balance · Fleet -->
                 <div class="grid grid-cols-2 lg:grid-cols-4 gap-4">
-                    <div class="bg-white rounded-xl border border-slate-200 p-5"><div class="text-3xl font-semibold text-slate-800">{{ data.metrics.projects.active }} <span class="text-lg text-slate-400">/ {{ data.metrics.projects.total }}</span></div><div class="text-sm text-slate-500 mt-1">Active projects <span class="text-slate-400">({{ data.metrics.projects.total }} total)</span></div></div>
                     <div class="bg-white rounded-xl border border-slate-200 p-5">
                         <div class="text-3xl font-semibold text-emerald-600">{{ fmt(data.metrics.finance.income.base) }}</div>
                         <div class="text-sm text-slate-500 mt-1">Income (base)</div>
@@ -317,11 +323,29 @@
                         <div class="text-sm text-slate-500 mt-1">Expense (total)</div>
                         <div class="text-xs text-slate-400 mt-1">Base {{ fmt(data.metrics.finance.expense.base) }} · GST {{ fmt(data.metrics.finance.expense.gst) }}</div>
                     </div>
+                    <div class="bg-white rounded-xl border border-slate-200 p-5">
+                        <div class="text-3xl font-semibold" :class="balanceValue >= 0 ? 'text-emerald-700' : 'text-rose-600'">{{ fmt(balanceValue) }}</div>
+                        <div class="text-sm text-slate-500 mt-1">Balance <span class="text-slate-400">(income − expense)</span></div>
+                        <div v-if="(data.metrics.bank_balances||[]).length" class="mt-2 pt-2 border-t border-slate-100 space-y-0.5">
+                            <div v-for="b in data.metrics.bank_balances" :key="b.id" class="flex justify-between text-xs">
+                                <span class="text-slate-500 truncate mr-2">🏦 {{ b.label }}</span>
+                                <span :class="b.balance >= 0 ? 'text-emerald-700' : 'text-rose-600'">{{ fmt(b.balance) }}</span>
+                            </div>
+                        </div>
+                    </div>
                     <div class="bg-white rounded-xl border border-slate-200 p-5"><div class="text-3xl font-semibold text-slate-800">{{ data.metrics.fleet.in_use }}/{{ data.metrics.fleet.total }}</div><div class="text-sm text-slate-500 mt-1">Fleet in use</div></div>
                 </div>
 
-                <!-- Directory: clients / suppliers / sub-contractors (click through to Setup) -->
-                <div v-if="data.metrics.directory" class="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                <!-- Row 2: Active projects · Staff · Clients · Suppliers · Sub-contractors -->
+                <div v-if="data.metrics.directory" class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-4">
+                    <a href="#/projects" class="bg-white rounded-xl border border-slate-200 p-5 flex items-center gap-4 hover:shadow hover:border-brand/40 transition">
+                        <span class="inline-flex h-11 w-11 items-center justify-center rounded-xl bg-brand/10 text-brand text-xl">🏗️</span>
+                        <div><div class="text-2xl font-semibold text-slate-800">{{ data.metrics.projects.active }} <span class="text-base text-slate-400">/ {{ data.metrics.projects.total }}</span></div><div class="text-sm text-slate-500">Active projects</div></div>
+                    </a>
+                    <a href="#/staff" class="bg-white rounded-xl border border-slate-200 p-5 flex items-center gap-4 hover:shadow hover:border-brand/40 transition">
+                        <span class="inline-flex h-11 w-11 items-center justify-center rounded-xl bg-emerald-50 text-emerald-600 text-xl">👷</span>
+                        <div><div class="text-2xl font-semibold text-slate-800">{{ data.metrics.directory.staff }}</div><div class="text-sm text-slate-500">Staff</div></div>
+                    </a>
                     <a href="#/setup?tab=clients" class="bg-white rounded-xl border border-slate-200 p-5 flex items-center gap-4 hover:shadow hover:border-brand/40 transition">
                         <span class="inline-flex h-11 w-11 items-center justify-center rounded-xl bg-sky-50 text-sky-600 text-xl">👥</span>
                         <div><div class="text-2xl font-semibold text-slate-800">{{ data.metrics.directory.clients }}</div><div class="text-sm text-slate-500">Clients</div></div>

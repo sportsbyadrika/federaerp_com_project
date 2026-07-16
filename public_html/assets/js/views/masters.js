@@ -93,15 +93,18 @@
             ],
         },
         'bank-accounts': {
-            label: 'Bank Accounts', endpoint: '/api/bank-accounts',
-            columns: [{ key: 'account_label', label: 'Label' }, { key: 'bank_name', label: 'Bank' }, { key: 'account_number', label: 'Account no.' }, { key: 'ifsc', label: 'IFSC' }, { key: 'branch_name', label: 'Branch' }],
+            label: 'Bank Accounts', endpoint: '/api/bank-accounts', hasLedger: true,
+            columns: [{ key: 'account_label', label: 'Label' }, { key: 'bank_name', label: 'Bank' }, { key: 'account_number', label: 'Account no.' }, { key: 'ifsc', label: 'IFSC' }, { key: 'opening_balance', label: 'Opening bal.' }],
             fields: [
                 { key: 'account_label', label: 'Account label', type: 'text', required: true, placeholder: 'shown in dropdowns, e.g. Main Current A/c' },
                 { key: 'bank_name', label: 'Bank name', type: 'text', required: true },
                 { key: 'account_number', label: 'Account number', type: 'text', required: true },
                 { key: 'ifsc', label: 'IFSC', type: 'text' },
                 { key: 'branch_name', label: 'Branch name', type: 'text' },
+                { key: 'opening_balance', label: 'Opening balance', type: 'number' },
+                { key: 'opening_balance_date', label: 'Opening balance as-on date', type: 'date' },
             ],
+            defaults: { opening_balance: 0 },
         },
         'materials': {
             label: 'Materials', endpoint: '/api/materials',
@@ -205,8 +208,18 @@
                 catch (e) { CSApp.flash('error', e.message); }
             }
 
+            // ---- Bank ledger (bank-accounts resource) ----
+            const money = (n) => CSApp.money(n);
+            const ledger = reactive({ open: false, loading: false, data: null });
+            async function openLedger(row) {
+                ledger.open = true; ledger.loading = true; ledger.data = null;
+                try { ledger.data = (await api.get('/api/bank-accounts/' + row.id + '/ledger')).data; }
+                catch (e) { CSApp.flash('error', e.message); ledger.open = false; }
+                finally { ledger.loading = false; }
+            }
+
             onMounted(async () => { resetForm(); await ensureDynOptions(); load(); });
-            return { RESOURCES, keys, active, rows, loading, saving, form, filterValue, editingId, def, selectTab, save, remove, post, optionsFor, startEdit, cancelEdit };
+            return { RESOURCES, keys, active, rows, loading, saving, form, filterValue, editingId, def, selectTab, save, remove, post, optionsFor, startEdit, cancelEdit, money, ledger, openLedger };
         },
         template: `
         <div>
@@ -234,7 +247,7 @@
                             </select>
                             <textarea v-else-if="f.type==='textarea'" v-model="form[f.key]" rows="3" :placeholder="f.placeholder||''" class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-brand/40 focus:border-brand"></textarea>
                             <label v-else-if="f.type==='checkbox'" class="flex items-center gap-2 text-sm text-slate-600"><input type="checkbox" v-model="form[f.key]" class="accent-brand"> {{ f.label }}</label>
-                            <input v-else v-model="form[f.key]" :type="f.type==='number'?'number':(f.type==='email'?'email':'text')" :step="f.type==='number'?'any':null" :placeholder="f.placeholder||''"
+                            <input v-else v-model="form[f.key]" :type="f.type==='number'?'number':(f.type==='email'?'email':(f.type==='date'?'date':'text'))" :step="f.type==='number'?'any':null" :placeholder="f.placeholder||''"
                                    class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-brand/40 focus:border-brand">
                         </div>
                         <div class="flex gap-2">
@@ -272,6 +285,7 @@
                                         <template v-for="a in (def().rowActions||[])" :key="a.label">
                                             <button v-if="!a.hideWhen || !a.hideWhen(row)" @click="a.call(row, { def, post })" class="text-brand hover:underline text-xs mr-2">{{ a.label }}</button>
                                         </template>
+                                        <button v-if="def().hasLedger" @click="openLedger(row)" class="text-emerald-600 hover:underline text-xs mr-2">Ledger</button>
                                         <button @click="startEdit(row)" class="text-brand hover:underline text-xs mr-2">Edit</button>
                                         <button @click="remove(row)" class="text-rose-400 hover:text-rose-600 text-xs">Delete</button>
                                     </td>
@@ -280,6 +294,64 @@
                             </tbody>
                         </table>
                     </div>
+                </div>
+            </div>
+
+            <!-- Bank ledger modal -->
+            <div v-if="ledger.open" class="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 px-4 py-6 overflow-y-auto print:hidden">
+                <div class="w-full max-w-3xl bg-white rounded-xl shadow-xl p-6 my-auto">
+                    <div class="flex items-center justify-between mb-4">
+                        <h2 class="font-semibold text-slate-800">Bank ledger</h2>
+                        <button @click="ledger.open=false" class="text-slate-400">✕</button>
+                    </div>
+                    <div v-if="ledger.loading" class="text-slate-400 text-sm py-8 text-center">Loading…</div>
+                    <div v-else-if="ledger.data">
+                        <!-- header -->
+                        <div class="flex items-start justify-between flex-wrap gap-2 mb-4 rounded-lg bg-slate-50 border border-slate-200 px-4 py-3">
+                            <div>
+                                <div class="font-medium text-slate-800">{{ ledger.data.bank.bank_name }} <span class="text-slate-400 text-sm">· {{ ledger.data.bank.account_label }}</span></div>
+                                <div class="text-xs text-slate-500">A/c {{ ledger.data.bank.account_number }}<span v-if="ledger.data.bank.ifsc"> · {{ ledger.data.bank.ifsc }}</span></div>
+                            </div>
+                            <div class="text-right text-sm">
+                                <div class="text-slate-500">Opening balance</div>
+                                <div class="font-semibold text-slate-800">{{ money(ledger.data.bank.opening_balance) }}</div>
+                                <div v-if="ledger.data.bank.opening_balance_date" class="text-xs text-slate-400">as on {{ (ledger.data.bank.opening_balance_date||'').slice(0,10) }}</div>
+                            </div>
+                        </div>
+                        <div class="table-scroll">
+                            <table class="w-full text-sm">
+                                <thead><tr class="text-left text-slate-400 border-b border-slate-100">
+                                    <th class="py-2 px-3">Date</th><th class="py-2 px-3">Type</th><th class="py-2 px-3">Reference</th>
+                                    <th class="py-2 px-3 text-right">Income</th><th class="py-2 px-3 text-right">Expense</th><th class="py-2 px-3 text-right">Balance</th>
+                                </tr></thead>
+                                <tbody>
+                                    <tr class="border-b border-slate-50 bg-slate-50/40">
+                                        <td class="py-2 px-3 text-slate-500" colspan="5">Opening balance</td>
+                                        <td class="py-2 px-3 text-right text-slate-600">{{ money(ledger.data.bank.opening_balance) }}</td>
+                                    </tr>
+                                    <tr v-for="(t,i) in ledger.data.transactions" :key="i" class="border-b border-slate-50">
+                                        <td class="py-2 px-3 text-slate-600 whitespace-nowrap">{{ (t.txn_date||'').slice(0,10) }}</td>
+                                        <td class="py-2 px-3"><span class="px-2 py-0.5 rounded-full text-xs" :class="t.txn_type==='income'?'bg-emerald-50 text-emerald-700':'bg-rose-50 text-rose-700'">{{ t.txn_type }}</span></td>
+                                        <td class="py-2 px-3 text-slate-600">{{ t.reference || '—' }}</td>
+                                        <td class="py-2 px-3 text-right text-emerald-700 whitespace-nowrap">{{ +t.income_amount ? money(t.income_amount) : '—' }}</td>
+                                        <td class="py-2 px-3 text-right text-rose-600 whitespace-nowrap">{{ +t.expense_amount ? money(t.expense_amount) : '—' }}</td>
+                                        <td class="py-2 px-3 text-right font-medium text-slate-800 whitespace-nowrap">{{ money(t.balance) }}</td>
+                                    </tr>
+                                    <tr v-if="!ledger.data.transactions.length"><td colspan="6" class="py-6 text-center text-slate-400">No transactions through this account yet.</td></tr>
+                                </tbody>
+                                <tfoot>
+                                    <tr class="border-t-2 border-slate-200 font-semibold text-slate-700">
+                                        <td class="py-2 px-3" colspan="3">Totals</td>
+                                        <td class="py-2 px-3 text-right text-emerald-700">{{ money(ledger.data.income_total) }}</td>
+                                        <td class="py-2 px-3 text-right text-rose-600">{{ money(ledger.data.expense_total) }}</td>
+                                        <td class="py-2 px-3 text-right" :class="ledger.data.balance >= 0 ? 'text-emerald-700' : 'text-rose-600'">{{ money(ledger.data.balance) }}</td>
+                                    </tr>
+                                    <tr><td colspan="6" class="py-1 px-3 text-right text-xs text-slate-400">Balance = opening − expenditure + income</td></tr>
+                                </tfoot>
+                            </table>
+                        </div>
+                    </div>
+                    <div class="flex justify-end mt-4"><button @click="ledger.open=false" class="px-4 py-2 text-sm rounded-lg border border-slate-300 text-slate-600">Close</button></div>
                 </div>
             </div>
         </div>`,
