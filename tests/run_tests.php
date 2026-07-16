@@ -369,6 +369,45 @@ check('projects: financial summary rolls up income/expense per project + totals'
         && abs($sum['totals']['inc_base'] - $incBase) < 0.01
         && abs($sum['totals']['balance'] - $bal) < 0.01;
 });
+check('expenditure: staff party type + bank account link (non-cash only)', function () use ($db, $projectId) {
+    $svc = new \App\Services\ExpenditureService();
+    $staffId = (int)$db->fetchColumn('SELECT id FROM staff_members WHERE tenant_id=? LIMIT 1', [DEMO]);
+    $bankId = (int)$db->fetchColumn('SELECT id FROM bank_accounts WHERE tenant_id=? LIMIT 1', [DEMO]);
+    // Fund transfer to a staff member, with a bank account.
+    $r = $svc->create(DEMO, null, ['scope' => 'project', 'project_id' => $projectId, 'party_type' => 'staff', 'party_id' => $staffId,
+        'amount' => 5000, 'mode' => 'fund_transfer', 'bank_account_id' => $bankId, 'expense_date' => '2026-05-01']);
+    if ($r['party_type'] !== 'staff' || (int)$r['party_id'] !== $staffId || (int)$r['bank_account_id'] !== $bankId) return false;
+    // The list resolves the staff name + bank label.
+    $found = null;
+    foreach ($svc->list(DEMO)['items'] as $it) { if ((int)$it['id'] === (int)$r['id']) { $found = $it; break; } }
+    if (!$found || empty($found['party_name']) || empty($found['bank_label'])) return false;
+    // Cash mode must drop any bank account.
+    $cash = $svc->update(DEMO, (int)$r['id'], ['scope' => 'project', 'project_id' => $projectId, 'party_type' => 'staff', 'party_id' => $staffId,
+        'amount' => 5000, 'mode' => 'cash', 'bank_account_id' => $bankId, 'expense_date' => '2026-05-01']);
+    if ($cash['bank_account_id'] !== null) return false;
+    $svc->delete(DEMO, (int)$r['id']);
+    return true;
+});
+check('salary slips: earnings/deductions totals, gross + net; cross-tenant blocked', function () use ($db) {
+    $svc = new \App\Services\SalarySlipService();
+    $staffId = (int)$db->fetchColumn('SELECT id FROM staff_members WHERE tenant_id=? LIMIT 1', [DEMO]);
+    $slip = $svc->create(DEMO, null, ['staff_id' => $staffId, 'period' => '2026-07', 'lines' => [
+        ['line_type' => 'earning', 'label' => 'Basic', 'amount' => 20000],
+        ['line_type' => 'earning', 'label' => 'HRA', 'amount' => 8000],
+        ['line_type' => 'deduction', 'label' => 'PF', 'amount' => 2400],
+        ['line_type' => 'deduction', 'label' => 'bad', 'amount' => 0],   // dropped (0)
+    ]]);
+    if (abs((float)$slip['earnings_total'] - 28000.00) > 0.01) return false;   // gross
+    if (abs((float)$slip['deductions_total'] - 2400.00) > 0.01) return false;
+    if (abs((float)$slip['net_salary'] - 25600.00) > 0.01) return false;       // 28000 - 2400
+    if (count($slip['lines']) !== 3) return false;                             // zero line dropped
+    if (empty($slip['staff_name'])) return false;
+    if (count($svc->listForStaff(DEMO, $staffId)) < 1) return false;
+    try { $svc->get(999002, (int)$slip['id']); return false; }
+    catch (ServiceException $e) { $ok = $e->code() === 'not_found'; }
+    $svc->delete(DEMO, (int)$slip['id']);
+    return $ok;
+});
 check('dashboard: weekly progress derives from tasks in a done column', function () use ($db, $projectId) {
     $data = (new \App\Services\DashboardService())->tenant(DEMO);
     $row = null;

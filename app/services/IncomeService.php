@@ -18,7 +18,7 @@ final class IncomeService extends BaseService
     {
         $this->income = new GenericModel('incomes', [
             'tenant_id', 'project_id', 'client_id', 'receipt_no', 'amount', 'gst_percent',
-            'gst_amount', 'total_amount', 'mode', 'reference', 'income_date', 'notes', 'created_by',
+            'gst_amount', 'total_amount', 'mode', 'bank_account_id', 'reference', 'income_date', 'notes', 'created_by',
         ]);
     }
 
@@ -28,10 +28,11 @@ final class IncomeService extends BaseService
         $params = [':t' => $tenantId];
         if ($projectId) { $conds[] = 'i.project_id = :p'; $params[':p'] = $projectId; }
         $rows = Database::instance()->fetchAll(
-            'SELECT i.*, p.name AS project_name, c.name AS client_name
+            'SELECT i.*, p.name AS project_name, c.name AS client_name, ba.account_label AS bank_label
                FROM incomes i
                LEFT JOIN projects p ON p.id = i.project_id
                LEFT JOIN clients c ON c.id = i.client_id
+               LEFT JOIN bank_accounts ba ON ba.id = i.bank_account_id
               WHERE ' . implode(' AND ', $conds) . '
               ORDER BY i.income_date DESC, i.id DESC',
             $params
@@ -48,10 +49,12 @@ final class IncomeService extends BaseService
     public function get(int $tenantId, int $id): array
     {
         $row = Database::instance()->fetch(
-            'SELECT i.*, p.name AS project_name, p.code AS project_code, c.name AS client_name, c.address AS client_address, c.gst_number AS client_gst
+            'SELECT i.*, p.name AS project_name, p.code AS project_code, c.name AS client_name, c.address AS client_address, c.gst_number AS client_gst,
+                    ba.account_label AS bank_label
                FROM incomes i
                LEFT JOIN projects p ON p.id = i.project_id
                LEFT JOIN clients c ON c.id = i.client_id
+               LEFT JOIN bank_accounts ba ON ba.id = i.bank_account_id
               WHERE i.id = :id AND i.tenant_id = :t',
             [':id' => $id, ':t' => $tenantId]
         );
@@ -74,6 +77,7 @@ final class IncomeService extends BaseService
             'gst_amount'   => $computed['gst_amount'],
             'total_amount' => $computed['total_amount'],
             'mode'         => $this->safeMode($in['mode'] ?? 'fund_transfer'),
+            'bank_account_id' => $this->bankFor($in['mode'] ?? 'fund_transfer', $in['bank_account_id'] ?? null),
             'reference'    => $in['reference'] ?? null,
             'income_date'  => $in['income_date'] ?? date('Y-m-d'),
             'notes'        => $in['notes'] ?? null,
@@ -94,6 +98,7 @@ final class IncomeService extends BaseService
             'gst_amount'   => $computed['gst_amount'],
             'total_amount' => $computed['total_amount'],
             'mode'         => $this->safeMode($in['mode'] ?? 'fund_transfer'),
+            'bank_account_id' => $this->bankFor($in['mode'] ?? 'fund_transfer', $in['bank_account_id'] ?? null),
             'reference'    => $in['reference'] ?? null,
             'income_date'  => $in['income_date'] ?? date('Y-m-d'),
             'notes'        => $in['notes'] ?? null,
@@ -110,6 +115,13 @@ final class IncomeService extends BaseService
     private function safeMode(?string $mode): string
     {
         return in_array($mode, ['cash', 'fund_transfer', 'cheque', 'dd'], true) ? $mode : 'fund_transfer';
+    }
+
+    /** A bank account only applies to non-cash modes; blank -> null. */
+    private function bankFor(?string $mode, $bankId): ?int
+    {
+        if (!in_array($mode, ['fund_transfer', 'cheque', 'dd'], true)) return null;
+        return ($bankId === null || $bankId === '') ? null : (int)$bankId;
     }
 
     private function compute(array $in): array

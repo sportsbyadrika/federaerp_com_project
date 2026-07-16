@@ -457,7 +457,18 @@ try {
     // ---- Staff master (workforce directory) -------------------------------
     $db->insert('staff_members', ['tenant_id' => DEMO_ORG, 'staff_code' => 'STF-001', 'name' => 'Ramesh Kumar', 'phone' => '+91 90000 11111', 'email' => 'ramesh@skyline.test', 'staff_type' => 'office', 'address' => 'Kochi', 'pan' => 'ABCPR1234K', 'status' => 'active']);
     $db->insert('staff_members', ['tenant_id' => DEMO_ORG, 'staff_code' => 'STF-002', 'name' => 'Anil Mason', 'phone' => '+91 90000 22222', 'staff_type' => 'skilled', 'address' => 'Ernakulam', 'status' => 'active']);
-    $db->insert('staff_members', ['tenant_id' => DEMO_ORG, 'staff_code' => 'STF-003', 'name' => 'Helper Team', 'staff_type' => 'unskilled', 'status' => 'active']);
+    $staff1 = $db->insert('staff_members', ['tenant_id' => DEMO_ORG, 'staff_code' => 'STF-003', 'name' => 'Helper Team', 'staff_type' => 'unskilled', 'status' => 'active']);
+
+    // ---- Bank account master ----------------------------------------------
+    $bankMain = $db->insert('bank_accounts', ['tenant_id' => DEMO_ORG, 'account_label' => 'Main Current A/c', 'bank_name' => 'State Bank', 'account_number' => '00112233445', 'ifsc' => 'SBIN0001234', 'branch_name' => 'Marine Drive', 'is_active' => 1]);
+    $db->insert('bank_accounts', ['tenant_id' => DEMO_ORG, 'account_label' => 'Payroll A/c', 'bank_name' => 'HDFC Bank', 'account_number' => '99887766554', 'ifsc' => 'HDFC0000567', 'branch_name' => 'MG Road', 'is_active' => 1]);
+
+    // ---- Salary slip sample -----------------------------------------------
+    $slipId = $db->insert('salary_slips', ['tenant_id' => DEMO_ORG, 'staff_id' => $staff1, 'period' => '2026-06', 'earnings_total' => 32000, 'deductions_total' => 3400, 'net_salary' => 28600, 'notes' => 'June payroll', 'created_by' => $adminId]);
+    $db->insert('salary_slip_lines', ['tenant_id' => DEMO_ORG, 'slip_id' => $slipId, 'line_type' => 'earning', 'label' => 'Basic', 'amount' => 24000, 'sort_order' => 0]);
+    $db->insert('salary_slip_lines', ['tenant_id' => DEMO_ORG, 'slip_id' => $slipId, 'line_type' => 'earning', 'label' => 'HRA', 'amount' => 8000, 'sort_order' => 1]);
+    $db->insert('salary_slip_lines', ['tenant_id' => DEMO_ORG, 'slip_id' => $slipId, 'line_type' => 'deduction', 'label' => 'PF', 'amount' => 2400, 'sort_order' => 0]);
+    $db->insert('salary_slip_lines', ['tenant_id' => DEMO_ORG, 'slip_id' => $slipId, 'line_type' => 'deduction', 'label' => 'Professional Tax', 'amount' => 1000, 'sort_order' => 1]);
 
     // ---- Expenditure + Income samples -------------------------------------
     // Materials purchase carries 18% GST; the other two are GST-free.
@@ -466,14 +477,14 @@ try {
         'tenant_id' => DEMO_ORG, 'scope' => 'project', 'project_id' => $projectId,
         'expenditure_type_id' => $expTypeIds['Materials'], 'party_type' => 'supplier', 'party_id' => $supId,
         'amount' => $matBase, 'gst_percent' => 18, 'gst_amount' => $matGst, 'total_amount' => round($matBase + $matGst, 2),
-        'mode' => 'fund_transfer', 'reference' => 'PO-cement-batch1',
+        'mode' => 'fund_transfer', 'bank_account_id' => $bankMain, 'reference' => 'PO-cement-batch1',
         'expense_date' => '2026-03-05', 'notes' => 'Cement + steel purchase', 'created_by' => $adminId,
     ]);
     $db->insert('expenditures', [
         'tenant_id' => DEMO_ORG, 'scope' => 'project', 'project_id' => $projectId,
         'expenditure_type_id' => $expTypeIds['Labour'], 'party_type' => 'subcontractor', 'party_id' => $scId,
         'amount' => 18000, 'gst_percent' => 0, 'gst_amount' => 0, 'total_amount' => 18000,
-        'mode' => 'cheque', 'reference' => 'CHQ-00231',
+        'mode' => 'cheque', 'bank_account_id' => $bankMain, 'reference' => 'CHQ-00231',
         'expense_date' => '2026-03-20', 'notes' => 'Steel erection labour', 'created_by' => $adminId,
     ]);
     $db->insert('expenditures', [
@@ -489,7 +500,7 @@ try {
         'tenant_id' => DEMO_ORG, 'project_id' => $projectId, 'client_id' => $clientId,
         'receipt_no' => 'RCPT-2026-0001', 'amount' => $incAmt, 'gst_percent' => $incGstPct,
         'gst_amount' => $incGst, 'total_amount' => round($incAmt + $incGst, 2), 'mode' => 'fund_transfer',
-        'reference' => 'NEFT-77120', 'income_date' => '2026-04-10', 'notes' => 'Milestone 1 payment', 'created_by' => $adminId,
+        'bank_account_id' => $bankMain, 'reference' => 'NEFT-77120', 'income_date' => '2026-04-10', 'notes' => 'Milestone 1 payment', 'created_by' => $adminId,
     ]);
 
     $pdo->commit();

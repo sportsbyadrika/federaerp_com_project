@@ -136,6 +136,12 @@ return function (Router $router, array $auth, array $write): void {
         $r->put('/incomes/{id}', 'IncomeController@update', $write);
         $r->delete('/incomes/{id}', 'IncomeController@destroy', $write);
 
+        // ---- Staff salary slips -------------------------------------------
+        $r->get('/staff/{id}/salary-slips', 'SalarySlipController@index', $auth);
+        $r->post('/staff/{id}/salary-slips', 'SalarySlipController@store', $write);
+        $r->get('/salary-slips/{id}', 'SalarySlipController@show', $auth);
+        $r->delete('/salary-slips/{id}', 'SalarySlipController@destroy', $write);
+
         // ---- Institution settings -----------------------------------------
         $r->get('/organisation', 'OrganisationController@show', $auth);
         $r->get('/organisation/logo', 'OrganisationController@logo', $auth);
@@ -151,7 +157,7 @@ return function (Router $router, array $auth, array $write): void {
         $r->delete('/currencies/{id}', 'CurrencyController@destroy', $write);
 
         // ---- Master data (generic tenant-scoped CRUD) ---------------------
-        $resources = ['clients','suppliers','construction-models','base-rates','materials','subcontractors','vehicles','employees','unit-types','boq-items','expenditure-types','staff'];
+        $resources = ['clients','suppliers','construction-models','base-rates','materials','subcontractors','vehicles','employees','unit-types','boq-items','expenditure-types','staff','bank-accounts'];
         foreach ($resources as $res) {
             $r->get("/{$res}", 'MasterDataController@index', $auth);
             $r->get("/{$res}/{id}", 'MasterDataController@show', $auth);
