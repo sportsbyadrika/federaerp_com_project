@@ -460,8 +460,8 @@ try {
     $staff1 = $db->insert('staff_members', ['tenant_id' => DEMO_ORG, 'staff_code' => 'STF-003', 'name' => 'Helper Team', 'staff_type' => 'unskilled', 'status' => 'active']);
 
     // ---- Bank account master ----------------------------------------------
-    $bankMain = $db->insert('bank_accounts', ['tenant_id' => DEMO_ORG, 'account_label' => 'Main Current A/c', 'bank_name' => 'State Bank', 'account_number' => '00112233445', 'ifsc' => 'SBIN0001234', 'branch_name' => 'Marine Drive', 'is_active' => 1]);
-    $db->insert('bank_accounts', ['tenant_id' => DEMO_ORG, 'account_label' => 'Payroll A/c', 'bank_name' => 'HDFC Bank', 'account_number' => '99887766554', 'ifsc' => 'HDFC0000567', 'branch_name' => 'MG Road', 'is_active' => 1]);
+    $bankMain = $db->insert('bank_accounts', ['tenant_id' => DEMO_ORG, 'account_label' => 'Main Current A/c', 'bank_name' => 'State Bank', 'account_number' => '00112233445', 'ifsc' => 'SBIN0001234', 'branch_name' => 'Marine Drive', 'opening_balance' => 250000, 'opening_balance_date' => '2026-01-01', 'is_active' => 1]);
+    $db->insert('bank_accounts', ['tenant_id' => DEMO_ORG, 'account_label' => 'Payroll A/c', 'bank_name' => 'HDFC Bank', 'account_number' => '99887766554', 'ifsc' => 'HDFC0000567', 'branch_name' => 'MG Road', 'opening_balance' => 100000, 'opening_balance_date' => '2026-01-01', 'is_active' => 1]);
 
     // ---- Salary slip sample -----------------------------------------------
     $slipId = $db->insert('salary_slips', ['tenant_id' => DEMO_ORG, 'staff_id' => $staff1, 'period' => '2026-06', 'earnings_total' => 32000, 'deductions_total' => 3400, 'net_salary' => 28600, 'notes' => 'June payroll', 'created_by' => $adminId]);

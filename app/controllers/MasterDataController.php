@@ -81,7 +81,7 @@ final class MasterDataController extends Controller
         ],
         'bank-accounts' => [
             'table' => 'bank_accounts', 'soft' => true,
-            'fillable' => ['tenant_id','account_label','bank_name','account_number','ifsc','branch_name','is_active'],
+            'fillable' => ['tenant_id','account_label','bank_name','account_number','ifsc','branch_name','opening_balance','opening_balance_date','is_active'],
             'required' => ['account_label' => 'required|string|max:120', 'bank_name' => 'required|string|max:160', 'account_number' => 'required|string|max:60'],
         ],
     ];
