@@ -397,7 +397,13 @@ check('validator: string max sizes by length, not numeric value', function () {
     if ($tooLong->passes()) return false;
     // A plain numeric rule still bounds by magnitude.
     $numeric = \Core\Validator::make(['n' => '80'], ['n' => 'numeric|max:60']);
-    return !$numeric->passes();
+    if ($numeric->passes()) return false;
+    // A string field also accepts an all-digit value arriving as a JSON number.
+    $asNumber = \Core\Validator::make(['account_number' => 123456789012], ['account_number' => 'required|string|max:60']);
+    if (!$asNumber->passes()) return false;
+    // Non-scalars are still rejected by string.
+    $arr = \Core\Validator::make(['x' => ['a']], ['x' => 'string']);
+    return !$arr->passes();
 });
 check('salary slips: earnings/deductions totals, gross + net; cross-tenant blocked', function () use ($db) {
     $svc = new \App\Services\SalarySlipService();
