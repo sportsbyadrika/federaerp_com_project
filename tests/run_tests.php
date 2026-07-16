@@ -405,6 +405,26 @@ check('validator: string max sizes by length, not numeric value', function () {
     $arr = \Core\Validator::make(['x' => ['a']], ['x' => 'string']);
     return !$arr->passes();
 });
+check('bank ledger: opening + income − expense balance, per-bank balances', function () use ($db) {
+    $svc = new \App\Services\BankService();
+    $bankId = (int)$db->fetchColumn("SELECT id FROM bank_accounts WHERE tenant_id=? AND account_label='Main Current A/c'", [DEMO]);
+    $led = $svc->ledger(DEMO, $bankId);
+    // seed Main A/c: opening 250000; income 118000 (RCPT-0001 total); expense 42000*1.18=49560 + 18000 = 67560.
+    if (abs((float)$led['bank']['opening_balance'] - 250000.00) > 0.01) return false;
+    if (abs((float)$led['income_total'] - 118000.00) > 0.01) return false;
+    if (abs((float)$led['expense_total'] - 67560.00) > 0.01) return false;
+    if (abs((float)$led['balance'] - (250000 + 118000 - 67560)) > 0.01) return false;   // 300440
+    if (count($led['transactions']) < 3) return false;
+    // running balance on the last row equals the final balance
+    $last = end($led['transactions']);
+    if (abs((float)$last['balance'] - (float)$led['balance']) > 0.01) return false;
+    // balances() includes this bank with the same figure
+    $found = null;
+    foreach ($svc->balances(DEMO) as $b) { if ((int)$b['id'] === $bankId) { $found = $b; break; } }
+    if (!$found || abs((float)$found['balance'] - (float)$led['balance']) > 0.01) return false;
+    try { $svc->ledger(999003, $bankId); return false; }
+    catch (ServiceException $e) { return $e->code() === 'not_found'; }
+});
 check('salary slips: earnings/deductions totals, gross + net; cross-tenant blocked', function () use ($db) {
     $svc = new \App\Services\SalarySlipService();
     $staffId = (int)$db->fetchColumn('SELECT id FROM staff_members WHERE tenant_id=? LIMIT 1', [DEMO]);

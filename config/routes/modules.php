@@ -136,6 +136,9 @@ return function (Router $router, array $auth, array $write): void {
         $r->put('/incomes/{id}', 'IncomeController@update', $write);
         $r->delete('/incomes/{id}', 'IncomeController@destroy', $write);
 
+        // ---- Bank ledger --------------------------------------------------
+        $r->get('/bank-accounts/{id}/ledger', 'BankController@ledger', $auth);
+
         // ---- Staff salary slips -------------------------------------------
         $r->get('/staff/{id}/salary-slips', 'SalarySlipController@index', $auth);
         $r->post('/staff/{id}/salary-slips', 'SalarySlipController@store', $write);
