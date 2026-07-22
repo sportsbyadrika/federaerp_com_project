@@ -127,6 +127,18 @@
                 } catch (e) { CSApp.flash('error', e.message); }
                 finally { saving.value = false; }
             }
+            // ---- Party ledger (supplier / sub-contractor) ----
+            const pledger = reactive({ open: false, loading: false, data: null, label: '' });
+            const partyLinkable = (r) => (r.party_type === 'supplier' || r.party_type === 'subcontractor') && r.party_id;
+            async function openPartyLedger(r) {
+                if (!partyLinkable(r)) return;
+                pledger.open = true; pledger.loading = true; pledger.data = null;
+                pledger.label = r.party_type === 'supplier' ? 'Supplier' : 'Sub-contractor';
+                try { pledger.data = (await api.get('/api/party-ledger/' + r.party_type + '/' + r.party_id)).data; }
+                catch (e) { CSApp.flash('error', e.message); pledger.open = false; }
+                finally { pledger.loading = false; }
+            }
+
             async function remove(r) {
                 if (!confirm('Delete this expenditure?')) return;
                 try { await api.del('/api/expenditures/' + r.id); CSApp.flash('success', 'Deleted'); await load(); }
@@ -150,6 +162,7 @@
                 rows, total, gstTotal, baseTotal, loading, saving, filterScope, filterProjectId, projects, types, tasks, banks, needsBank, fmt, nf, sym, MODES, modeLabel,
                 showModal, editingId, form, partyOptions, gstAmount, recalcFromBase, recalcFromTotal, load, openAdd, openEdit, save, remove,
                 onScopeChange, onProjectChange, onPartyTypeChange,
+                pledger, partyLinkable, openPartyLedger,
             };
         },
         template: `
@@ -200,7 +213,11 @@
                                 <td class="py-2 px-3"><span class="px-2 py-0.5 rounded-full text-xs" :class="r.scope==='project'?'bg-sky-50 text-sky-700':'bg-violet-50 text-violet-700'">{{ r.scope }}</span></td>
                                 <td class="py-2 px-3 text-slate-700">{{ r.project_name || '—' }}</td>
                                 <td class="py-2 px-3 text-slate-700">{{ r.type_name || '—' }}</td>
-                                <td class="py-2 px-3 text-slate-700">{{ r.party_name || '—' }}<span v-if="r.party_type && r.party_type!=='none'" class="block text-[11px] text-slate-400 capitalize">{{ r.party_type }}</span></td>
+                                <td class="py-2 px-3 text-slate-700">
+                                    <button v-if="partyLinkable(r)" @click="openPartyLedger(r)" class="text-brand hover:underline">{{ r.party_name }}</button>
+                                    <span v-else>{{ r.party_name || '—' }}</span>
+                                    <span v-if="r.party_type && r.party_type!=='none'" class="block text-[11px] text-slate-400 capitalize">{{ r.party_type }}</span>
+                                </td>
                                 <td class="py-2 px-3 text-slate-600">{{ r.task_title || '—' }}</td>
                                 <td class="py-2 px-3 text-right text-slate-600 whitespace-nowrap">{{ fmt(r.amount) }}</td>
                                 <td class="py-2 px-3 text-right text-slate-500 whitespace-nowrap">{{ fmt(r.gst_amount) }}</td>
@@ -312,6 +329,50 @@
                         <button @click="showModal=false" class="px-4 py-2 text-sm rounded-lg border border-slate-300 text-slate-600">Cancel</button>
                         <button @click="save" :disabled="saving" class="px-4 py-2 text-sm rounded-lg bg-brand text-white hover:bg-brand-dark disabled:opacity-60">{{ saving ? 'Saving…' : 'Save' }}</button>
                     </div>
+                </div>
+            </div>
+
+            <!-- Party ledger (from clicking a supplier / sub-contractor name) -->
+            <div v-if="pledger.open" class="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 px-4 py-6 overflow-y-auto print:hidden">
+                <div class="w-full max-w-3xl bg-white rounded-xl shadow-xl p-6 my-auto">
+                    <div class="flex items-center justify-between mb-4">
+                        <h2 class="font-semibold text-slate-800">{{ pledger.label }} ledger</h2>
+                        <button @click="pledger.open=false" class="text-slate-400">✕</button>
+                    </div>
+                    <div v-if="pledger.loading" class="text-slate-400 text-sm py-8 text-center">Loading…</div>
+                    <div v-else-if="pledger.data">
+                        <div class="mb-4 rounded-lg bg-slate-50 border border-slate-200 px-4 py-3">
+                            <div class="font-medium text-slate-800">{{ pledger.data.party.name }}</div>
+                            <div class="text-xs text-slate-500"><span v-if="pledger.data.party.gst">GSTIN {{ pledger.data.party.gst }}</span><span v-if="pledger.data.party.phone"> · {{ pledger.data.party.phone }}</span></div>
+                        </div>
+                        <div class="table-scroll">
+                            <table class="w-full text-sm">
+                                <thead><tr class="text-left text-slate-400 border-b border-slate-100">
+                                    <th class="py-2 px-3">Date</th><th class="py-2 px-3">Type</th><th class="py-2 px-3">Project</th><th class="py-2 px-3">Reference</th>
+                                    <th class="py-2 px-3 text-right">Income</th><th class="py-2 px-3 text-right">Expense</th>
+                                </tr></thead>
+                                <tbody>
+                                    <tr v-for="(t,i) in pledger.data.transactions" :key="i" class="border-b border-slate-50">
+                                        <td class="py-2 px-3 text-slate-600 whitespace-nowrap">{{ (t.txn_date||'').slice(0,10) }}</td>
+                                        <td class="py-2 px-3"><span class="px-2 py-0.5 rounded-full text-xs" :class="t.txn_type==='income'?'bg-emerald-50 text-emerald-700':'bg-rose-50 text-rose-700'">{{ t.txn_type }}</span></td>
+                                        <td class="py-2 px-3 text-slate-600">{{ t.project_name || '—' }}</td>
+                                        <td class="py-2 px-3 text-slate-600">{{ t.reference || '—' }}</td>
+                                        <td class="py-2 px-3 text-right text-emerald-700 whitespace-nowrap">{{ +t.income_amount ? fmt(t.income_amount) : '—' }}</td>
+                                        <td class="py-2 px-3 text-right text-rose-600 whitespace-nowrap">{{ +t.expense_amount ? fmt(t.expense_amount) : '—' }}</td>
+                                    </tr>
+                                    <tr v-if="!pledger.data.transactions.length"><td colspan="6" class="py-6 text-center text-slate-400">No transactions yet.</td></tr>
+                                </tbody>
+                                <tfoot>
+                                    <tr class="border-t-2 border-slate-200 font-semibold text-slate-700">
+                                        <td class="py-2 px-3" colspan="4">Totals</td>
+                                        <td class="py-2 px-3 text-right text-emerald-700">{{ fmt(pledger.data.income_total) }}</td>
+                                        <td class="py-2 px-3 text-right text-rose-600">{{ fmt(pledger.data.expense_total) }}</td>
+                                    </tr>
+                                </tfoot>
+                            </table>
+                        </div>
+                    </div>
+                    <div class="flex justify-end mt-4"><button @click="pledger.open=false" class="px-4 py-2 text-sm rounded-lg border border-slate-300 text-slate-600">Close</button></div>
                 </div>
             </div>
         </div>`,

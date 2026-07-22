@@ -139,6 +139,9 @@ return function (Router $router, array $auth, array $write): void {
         // ---- Bank ledger --------------------------------------------------
         $r->get('/bank-accounts/{id}/ledger', 'BankController@ledger', $auth);
 
+        // ---- Party (client/supplier/sub-contractor) ledger ----------------
+        $r->get('/party-ledger/{type}/{id}', 'PartyLedgerController@show', $auth);
+
         // ---- Staff salary slips -------------------------------------------
         $r->get('/staff/{id}/salary-slips', 'SalarySlipController@index', $auth);
         $r->post('/staff/{id}/salary-slips', 'SalarySlipController@store', $write);
