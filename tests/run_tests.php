@@ -405,6 +405,59 @@ check('validator: string max sizes by length, not numeric value', function () {
     $arr = \Core\Validator::make(['x' => ['a']], ['x' => 'string']);
     return !$arr->passes();
 });
+check('staff logins + field work: create login, assign projects, log, admin review', function () use ($db, $projectId) {
+    $ls = new \App\Services\StaffLoginService();
+    $fs = new \App\Services\FieldService();
+    // Give a fresh staff member a field login assigned to the demo project.
+    $sid = (int)$db->fetchColumn("SELECT id FROM staff_members WHERE tenant_id=? AND staff_code='STF-001'", [DEMO]);
+    $res = $ls->save(DEMO, $sid, ['email' => 'ramesh.login@skyline.test', 'password' => 'Password123!', 'login_role' => 'field', 'project_ids' => [$projectId]]);
+    if (!$res['has_login'] || $res['login_role'] !== 'field') return false;
+    if (!in_array($projectId, array_map('intval', $res['project_ids']), true)) return false;
+    // The created user has role field_staff.
+    $uid = (int)$db->fetchColumn("SELECT user_id FROM staff_members WHERE id=?", [$sid]);
+    if ((string)$db->fetchColumn('SELECT role FROM users WHERE id=?', [$uid]) !== 'field_staff') return false;
+    // The field staff sees only their assigned projects + can log against them.
+    $ctx = $fs->context(DEMO, $uid);
+    if (count($ctx['projects']) !== 1) return false;
+    $log = $fs->createLog(DEMO, $uid, ['project_id' => $projectId, 'task_name' => 'Column casting', 'skilled_count' => 3, 'unskilled_count' => 5, 'log_date' => '2026-06-05']);
+    if ($log['review_status'] !== 'pending' || (int)$log['skilled_count'] !== 3) return false;
+    // Logging against an unassigned project is blocked.
+    $other = (int)$db->fetchColumn('SELECT id FROM projects WHERE tenant_id=? AND id<>? LIMIT 1', [DEMO, $projectId]);
+    if ($other) { try { $fs->createLog(DEMO, $uid, ['project_id' => $other, 'task_name' => 'x']); return false; } catch (ServiceException $e) {} }
+    // Admin review moves it to approved.
+    $reviewed = $fs->review(DEMO, (int)$log['id'], null, 'approved', 'ok');
+    if ($reviewed['review_status'] !== 'approved') return false;
+    if (!count($fs->myLogs(DEMO, $uid))) return false;
+    // Revoking the login unlinks the user + clears assignments.
+    $ls->revoke(DEMO, $sid);
+    if ($db->fetchColumn("SELECT user_id FROM staff_members WHERE id=?", [$sid]) !== null) return false;
+    return (int)$db->fetchColumn('SELECT COUNT(*) FROM staff_projects WHERE staff_member_id=?', [$sid]) === 0;
+});
+check('party ledger: client income+project expense, supplier/subcontractor expense', function () use ($db) {
+    $svc = new \App\Services\PartyLedgerService();
+    $clientId = (int)$db->fetchColumn('SELECT id FROM clients WHERE tenant_id=? LIMIT 1', [DEMO]);
+    $cl = $svc->ledger(DEMO, 'client', $clientId);
+    // Match against direct DB sums (income to the client + expenditure on their projects).
+    $cIncDb = (float)$db->fetchColumn('SELECT COALESCE(SUM(total_amount),0) FROM incomes WHERE tenant_id=? AND client_id=?', [DEMO, $clientId]);
+    $cExpDb = (float)$db->fetchColumn('SELECT COALESCE(SUM(e.total_amount),0) FROM expenditures e JOIN projects p ON p.id=e.project_id WHERE e.tenant_id=? AND p.client_id=?', [DEMO, $clientId]);
+    if (abs((float)$cl['income_total'] - $cIncDb) > 0.01) return false;
+    if (abs((float)$cl['expense_total'] - $cExpDb) > 0.01) return false;
+    if (abs((float)$cl['net'] - ($cIncDb - $cExpDb)) > 0.01) return false;
+    if (!count($cl['transactions'])) return false;
+    // Supplier: only expenditure paid to it, no income.
+    $supId = (int)$db->fetchColumn('SELECT id FROM suppliers WHERE tenant_id=? LIMIT 1', [DEMO]);
+    $sup = $svc->ledger(DEMO, 'supplier', $supId);
+    $supDb = (float)$db->fetchColumn("SELECT COALESCE(SUM(total_amount),0) FROM expenditures WHERE tenant_id=? AND party_type='supplier' AND party_id=?", [DEMO, $supId]);
+    if (abs((float)$sup['income_total']) > 0.01 || abs((float)$sup['expense_total'] - $supDb) > 0.01) return false;
+    // Sub-contractor.
+    $scId = (int)$db->fetchColumn('SELECT id FROM subcontractors WHERE tenant_id=? LIMIT 1', [DEMO]);
+    $sc = $svc->ledger(DEMO, 'subcontractor', $scId);
+    $scDb = (float)$db->fetchColumn("SELECT COALESCE(SUM(total_amount),0) FROM expenditures WHERE tenant_id=? AND party_type='subcontractor' AND party_id=?", [DEMO, $scId]);
+    if (abs((float)$sc['expense_total'] - $scDb) > 0.01) return false;
+    // Unknown type / cross-tenant guarded.
+    try { $svc->ledger(DEMO, 'bogus', $clientId); return false; } catch (ServiceException $e) {}
+    try { $svc->ledger(999004, 'client', $clientId); return false; } catch (ServiceException $e) { return $e->code() === 'not_found'; }
+});
 check('bank ledger: opening + income − expense balance, per-bank balances', function () use ($db) {
     $svc = new \App\Services\BankService();
     $bankId = (int)$db->fetchColumn("SELECT id FROM bank_accounts WHERE tenant_id=? AND account_label='Main Current A/c'", [DEMO]);

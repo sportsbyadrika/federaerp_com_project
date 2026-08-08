@@ -65,6 +65,41 @@
                 catch (e) { CSApp.flash('error', e.message); }
             }
 
+            // ---- Staff login (office / field) ----
+            const projects = ref([]);
+            const loginModal = reactive({ open: false, staff: null, loading: false, saving: false, hasLogin: false });
+            const loginForm = reactive({ email: '', password: '', login_role: 'office', project_ids: [] });
+            async function openLogin(staff) {
+                loginModal.open = true; loginModal.staff = staff; loginModal.loading = true; loginModal.hasLogin = false;
+                Object.assign(loginForm, { email: staff.email || '', password: '', login_role: 'office', project_ids: [] });
+                if (!projects.value.length) { try { projects.value = (await api.get('/api/projects')).data; } catch (e) {} }
+                try {
+                    const d = (await api.get('/api/staff/' + staff.id + '/login')).data;
+                    loginModal.hasLogin = d.has_login;
+                    if (d.has_login) { loginForm.email = d.email || ''; loginForm.login_role = d.login_role || 'office'; loginForm.project_ids = (d.project_ids || []).map(Number); }
+                } catch (e) { CSApp.flash('error', e.message); }
+                finally { loginModal.loading = false; }
+            }
+            async function saveLogin() {
+                if (!loginForm.email.trim()) { CSApp.flash('error', 'Email is required'); return; }
+                if (!loginModal.hasLogin && !loginForm.password) { CSApp.flash('error', 'Password is required to create the login'); return; }
+                loginModal.saving = true;
+                try {
+                    const payload = { email: loginForm.email, login_role: loginForm.login_role, project_ids: loginForm.login_role === 'field' ? loginForm.project_ids : [] };
+                    if (loginForm.password) payload.password = loginForm.password;
+                    await api.post('/api/staff/' + loginModal.staff.id + '/login', payload);
+                    CSApp.flash('success', 'Login saved'); loginModal.open = false; await load();
+                } catch (e) { CSApp.flash('error', e.message); }
+                finally { loginModal.saving = false; }
+            }
+            async function revokeLogin() {
+                if (!confirm('Remove login access for ' + loginModal.staff.name + '?')) return;
+                loginModal.saving = true;
+                try { await api.del('/api/staff/' + loginModal.staff.id + '/login'); CSApp.flash('success', 'Login removed'); loginModal.open = false; await load(); }
+                catch (e) { CSApp.flash('error', e.message); }
+                finally { loginModal.saving = false; }
+            }
+
             // ---- Salary slips ----
             const org = ref({});
             const nf = (n) => new Intl.NumberFormat(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(+n || 0);
@@ -159,7 +194,8 @@
 
             onMounted(load);
             return { rows, loading, saving, filter, filteredRows, TYPES, typeLabel, typeClass, showModal, editingId, form, openAdd, openEdit, save, remove,
-                slipModal, slipForm, grossTotal, dedTotal, netTotal, nf, sym, openSlips, addEarning, addDeduction, removeEarning, removeDeduction, saveSlip, deleteSlip, printSlip };
+                slipModal, slipForm, grossTotal, dedTotal, netTotal, nf, sym, openSlips, addEarning, addDeduction, removeEarning, removeDeduction, saveSlip, deleteSlip, printSlip,
+                projects, loginModal, loginForm, openLogin, saveLogin, revokeLogin };
         },
         template: `
         <div>
@@ -186,13 +222,16 @@
                         <tbody>
                             <tr v-for="r in filteredRows" :key="r.id" class="border-b border-slate-50">
                                 <td class="py-2 px-3 font-mono text-xs text-slate-600">{{ r.staff_code }}</td>
-                                <td class="py-2 px-3 text-slate-700">{{ r.name }}<div v-if="r.address" class="text-xs text-slate-400">{{ r.address }}</div></td>
+                                <td class="py-2 px-3 text-slate-700">{{ r.name }}
+                                    <span v-if="r.user_id" class="ml-1 px-1.5 py-0.5 rounded-full text-[10px]" :class="r.login_role==='field'?'bg-indigo-50 text-indigo-700':'bg-slate-100 text-slate-600'">🔑 {{ r.login_role==='field' ? 'field' : 'office' }}</span>
+                                    <div v-if="r.address" class="text-xs text-slate-400">{{ r.address }}</div></td>
                                 <td class="py-2 px-3"><span class="px-2 py-0.5 rounded-full text-xs" :class="typeClass(r.staff_type)">{{ typeLabel(r.staff_type) }}</span></td>
                                 <td class="py-2 px-3 text-slate-600 whitespace-nowrap">{{ r.phone || '—' }}</td>
                                 <td class="py-2 px-3 text-slate-600">{{ r.email || '—' }}</td>
                                 <td class="py-2 px-3 text-slate-600">{{ r.pan || '—' }}</td>
                                 <td class="py-2 px-3"><span class="px-2 py-0.5 rounded-full text-xs" :class="r.status==='active'?'bg-emerald-50 text-emerald-700':'bg-slate-100 text-slate-500'">{{ r.status }}</span></td>
                                 <td class="py-2 px-3 text-right whitespace-nowrap">
+                                    <button @click="openLogin(r)" title="Login access" class="text-indigo-600 hover:underline text-xs mr-2">🔑 Login</button>
                                     <button @click="openSlips(r)" title="Salary slips" class="text-emerald-600 hover:underline text-xs mr-2">💰 Salary</button>
                                     <button @click="openEdit(r)" class="text-brand hover:underline text-xs mr-2">Edit</button>
                                     <button @click="remove(r)" class="text-rose-400 hover:text-rose-600 text-xs">Delete</button>
@@ -307,6 +346,43 @@
                         </table>
                     </div>
                     <div class="flex justify-end mt-4"><button @click="slipModal.open=false" class="px-4 py-2 text-sm rounded-lg border border-slate-300 text-slate-600">Close</button></div>
+                </div>
+            </div>
+
+            <!-- Login access modal -->
+            <div v-if="loginModal.open" class="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 px-4 py-6 overflow-y-auto print:hidden">
+                <div class="w-full max-w-lg bg-white rounded-xl shadow-xl p-6 my-auto">
+                    <div class="flex items-center justify-between mb-1"><h2 class="font-semibold text-slate-800">🔑 Login access</h2><button @click="loginModal.open=false" class="text-slate-400">✕</button></div>
+                    <p class="text-xs text-slate-400 mb-4">{{ loginModal.staff && loginModal.staff.name }} · {{ loginModal.hasLogin ? 'existing login' : 'no login yet' }}</p>
+                    <div v-if="loginModal.loading" class="text-slate-400 text-sm py-6 text-center">Loading…</div>
+                    <div v-else class="space-y-3">
+                        <div><label class="block text-xs text-slate-500 mb-1">Login email</label><input v-model="loginForm.email" type="email" class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"></div>
+                        <div><label class="block text-xs text-slate-500 mb-1">Password <span v-if="loginModal.hasLogin" class="text-slate-400">(leave blank to keep)</span></label><input v-model="loginForm.password" type="password" class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm" :placeholder="loginModal.hasLogin ? '••••••••' : ''"></div>
+                        <div>
+                            <label class="block text-xs text-slate-500 mb-1">Role</label>
+                            <div class="flex gap-2">
+                                <button @click="loginForm.login_role='office'" :class="loginForm.login_role==='office'?'bg-brand text-white border-brand':'bg-white text-slate-600 border-slate-300'" class="flex-1 px-3 py-2 text-sm rounded-lg border">Office staff</button>
+                                <button @click="loginForm.login_role='field'" :class="loginForm.login_role==='field'?'bg-brand text-white border-brand':'bg-white text-slate-600 border-slate-300'" class="flex-1 px-3 py-2 text-sm rounded-lg border">Field staff</button>
+                            </div>
+                        </div>
+                        <div v-if="loginForm.login_role==='field'">
+                            <label class="block text-xs text-slate-500 mb-1">Assigned projects <span class="text-slate-400">(field staff can log against these)</span></label>
+                            <div class="rounded-lg border border-slate-200 p-2 max-h-40 overflow-y-auto space-y-1">
+                                <label v-for="p in projects" :key="p.id" class="flex items-center gap-2 text-sm text-slate-600">
+                                    <input type="checkbox" :value="p.id" v-model="loginForm.project_ids" class="accent-brand"> {{ p.name }}
+                                </label>
+                                <div v-if="!projects.length" class="text-xs text-slate-400">No projects available.</div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="flex justify-between items-center mt-5">
+                        <button v-if="loginModal.hasLogin" @click="revokeLogin" :disabled="loginModal.saving" class="px-4 py-2 text-sm rounded-lg border border-rose-300 text-rose-600 hover:bg-rose-50">Remove login</button>
+                        <span v-else></span>
+                        <div class="flex gap-2">
+                            <button @click="loginModal.open=false" class="px-4 py-2 text-sm rounded-lg border border-slate-300 text-slate-600">Cancel</button>
+                            <button @click="saveLogin" :disabled="loginModal.saving" class="px-4 py-2 text-sm rounded-lg bg-brand text-white hover:bg-brand-dark disabled:opacity-60">{{ loginModal.saving ? 'Saving…' : 'Save login' }}</button>
+                        </div>
+                    </div>
                 </div>
             </div>
         </div>`,

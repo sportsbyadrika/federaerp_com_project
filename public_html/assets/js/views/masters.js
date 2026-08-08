@@ -63,7 +63,7 @@
             rowActions: [{ label: 'Set default', hideWhen: (r) => +r.is_default === 1, call: (r, self) => self.post(self.def().endpoint + '/' + r.id + '/default') }],
         },
         'clients': {
-            label: 'Clients', endpoint: '/api/clients',
+            label: 'Clients', endpoint: '/api/clients', partyLedger: 'client',
             columns: [{ key: 'name', label: 'Name' }, { key: 'contact_person', label: 'Contact' }, { key: 'gst_number', label: 'GST' }, { key: 'pan', label: 'PAN' }, { key: 'phone', label: 'Phone' }],
             fields: [
                 { key: 'name', label: 'Name', type: 'text', required: true },
@@ -74,7 +74,7 @@
             ],
         },
         'suppliers': {
-            label: 'Suppliers', endpoint: '/api/suppliers',
+            label: 'Suppliers', endpoint: '/api/suppliers', partyLedger: 'supplier',
             columns: [{ key: 'name', label: 'Name' }, { key: 'contact_person', label: 'Contact' }, { key: 'gst_number', label: 'GST' }, { key: 'pan', label: 'PAN' }, { key: 'phone', label: 'Phone' }],
             fields: [
                 { key: 'name', label: 'Name', type: 'text', required: true }, { key: 'contact_person', label: 'Contact person', type: 'text' },
@@ -83,7 +83,7 @@
             ],
         },
         'subcontractors': {
-            label: 'Sub-contractors', endpoint: '/api/subcontractors',
+            label: 'Sub-contractors', endpoint: '/api/subcontractors', partyLedger: 'subcontractor',
             columns: [{ key: 'name', label: 'Name' }, { key: 'trade', label: 'Trade' }, { key: 'gst_number', label: 'GST' }, { key: 'pan', label: 'PAN' }, { key: 'phone', label: 'Phone' }],
             fields: [
                 { key: 'name', label: 'Name', type: 'text', required: true }, { key: 'trade', label: 'Trade', type: 'text', placeholder: 'e.g. Structural Steel' },
@@ -210,6 +210,8 @@
 
             // ---- Bank ledger (bank-accounts resource) ----
             const money = (n) => CSApp.money(n);
+            const nf = (n) => new Intl.NumberFormat(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(+n || 0);
+            const escp = (s) => String(s == null ? '' : s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
             const ledger = reactive({ open: false, loading: false, data: null });
             async function openLedger(row) {
                 ledger.open = true; ledger.loading = true; ledger.data = null;
@@ -218,8 +220,54 @@
                 finally { ledger.loading = false; }
             }
 
+            // ---- Party ledger (clients / suppliers / sub-contractors) ----
+            const org = ref({});
+            const pledger = reactive({ open: false, loading: false, data: null, label: '' });
+            async function openPartyLedger(row) {
+                const type = def().partyLedger;
+                pledger.open = true; pledger.loading = true; pledger.data = null; pledger.label = def().label.replace(/s$/, '');
+                if (!org.value.name) { try { org.value = (await api.get('/api/organisation')).data; } catch (e) { org.value = {}; } }
+                try { pledger.data = (await api.get('/api/party-ledger/' + type + '/' + row.id)).data; }
+                catch (e) { CSApp.flash('error', e.message); pledger.open = false; }
+                finally { pledger.loading = false; }
+            }
+            function printPartyLedger() {
+                if (!pledger.data) return;
+                const html = buildPartyLedgerHtml(pledger.data, pledger.label, org.value);
+                const w = window.open('', '_blank', 'width=900,height=1000');
+                if (!w) { CSApp.flash('error', 'Please allow pop-ups to generate the PDF'); return; }
+                w.document.open(); w.document.write(html); w.document.close();
+            }
+            function buildPartyLedgerHtml(d, kindLabel, o) {
+                const m = (n) => (store.currency && store.currency.symbol || '') + nf(n);
+                const instName = (o && (o.legal_name || o.name)) || (store.appName || 'Institution');
+                const instAddr = (o && (o.letterhead_address || o.address)) || '';
+                const rows = d.transactions.map(t =>
+                    '<tr><td>' + escp((t.txn_date || '').slice(0, 10)) + '</td><td>' + escp(t.txn_type) + '</td><td>' + escp(t.project_name || '') + '</td><td>' + escp(t.reference || '') + '</td>' +
+                    '<td class="r">' + (+t.income_amount ? m(t.income_amount) : '') + '</td><td class="r">' + (+t.expense_amount ? m(t.expense_amount) : '') + '</td></tr>'
+                ).join('') || '<tr><td colspan="6" class="muted">No transactions.</td></tr>';
+                return '<!doctype html><html><head><meta charset="utf-8"><title>' + escp(kindLabel) + ' ledger — ' + escp(d.party.name) + '</title>' +
+                    '<style>@page{size:A4;margin:16mm;}*{box-sizing:border-box;}body{font-family:Arial,Helvetica,sans-serif;color:#111;font-size:12px;margin:0;}' +
+                    '.sheet{max-width:180mm;margin:0 auto;}.hd{border-bottom:2px solid #222;padding-bottom:8px;margin-bottom:12px;}' +
+                    '.hd .name{font-size:19px;font-weight:bold;}.hd .meta{font-size:11px;color:#333;margin-top:2px;}' +
+                    '.title{text-align:center;font-size:14px;font-weight:bold;text-transform:uppercase;margin:6px 0 12px;letter-spacing:.5px;}' +
+                    '.party{font-size:12px;margin-bottom:12px;}table{width:100%;border-collapse:collapse;}td,th{border:1px solid #999;padding:6px 8px;font-size:11px;}th{background:#f2f2f2;text-align:left;}' +
+                    '.r{text-align:right;}.muted{color:#888;text-align:center;}tfoot td{font-weight:bold;background:#f7f7f7;}' +
+                    '.net{margin-top:14px;border:2px solid #222;padding:8px 12px;display:flex;justify-content:space-between;font-weight:bold;font-size:14px;}</style>' +
+                    '</head><body onload="window.focus();window.print();"><div class="sheet">' +
+                    '<div class="hd"><div class="name">' + escp(instName) + '</div><div class="meta">' + (instAddr ? escp(instAddr).replace(/\\n/g, '<br>') : '') + '</div></div>' +
+                    '<div class="title">' + escp(kindLabel) + ' Ledger</div>' +
+                    '<div class="party"><strong>' + escp(d.party.name) + '</strong>' + (d.party.gst ? ' · GSTIN: ' + escp(d.party.gst) : '') + (d.party.phone ? ' · ' + escp(d.party.phone) : '') + '</div>' +
+                    '<table><thead><tr><th>Date</th><th>Type</th><th>Project</th><th>Reference</th><th class="r">Income</th><th class="r">Expense</th></tr></thead>' +
+                    '<tbody>' + rows + '</tbody>' +
+                    '<tfoot><tr><td colspan="4" class="r">Totals</td><td class="r">' + m(d.income_total) + '</td><td class="r">' + m(d.expense_total) + '</td></tr></tfoot></table>' +
+                    '<div class="net"><span>Net (income − expense)</span><span>' + m(d.net) + '</span></div>' +
+                    '</div></body></html>';
+            }
+
             onMounted(async () => { resetForm(); await ensureDynOptions(); load(); });
-            return { RESOURCES, keys, active, rows, loading, saving, form, filterValue, editingId, def, selectTab, save, remove, post, optionsFor, startEdit, cancelEdit, money, ledger, openLedger };
+            return { RESOURCES, keys, active, rows, loading, saving, form, filterValue, editingId, def, selectTab, save, remove, post, optionsFor, startEdit, cancelEdit,
+                money, nf, ledger, openLedger, pledger, openPartyLedger, printPartyLedger };
         },
         template: `
         <div>
@@ -286,6 +334,7 @@
                                             <button v-if="!a.hideWhen || !a.hideWhen(row)" @click="a.call(row, { def, post })" class="text-brand hover:underline text-xs mr-2">{{ a.label }}</button>
                                         </template>
                                         <button v-if="def().hasLedger" @click="openLedger(row)" class="text-emerald-600 hover:underline text-xs mr-2">Ledger</button>
+                                        <button v-if="def().partyLedger" @click="openPartyLedger(row)" class="text-emerald-600 hover:underline text-xs mr-2">Ledger</button>
                                         <button @click="startEdit(row)" class="text-brand hover:underline text-xs mr-2">Edit</button>
                                         <button @click="remove(row)" class="text-rose-400 hover:text-rose-600 text-xs">Delete</button>
                                     </td>
@@ -352,6 +401,58 @@
                         </div>
                     </div>
                     <div class="flex justify-end mt-4"><button @click="ledger.open=false" class="px-4 py-2 text-sm rounded-lg border border-slate-300 text-slate-600">Close</button></div>
+                </div>
+            </div>
+
+            <!-- Party (client/supplier/sub-contractor) ledger modal -->
+            <div v-if="pledger.open" class="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 px-4 py-6 overflow-y-auto print:hidden">
+                <div class="w-full max-w-3xl bg-white rounded-xl shadow-xl p-6 my-auto">
+                    <div class="flex items-center justify-between mb-4">
+                        <h2 class="font-semibold text-slate-800">{{ pledger.label }} ledger</h2>
+                        <div class="flex items-center gap-2">
+                            <button v-if="pledger.data" @click="printPartyLedger" class="px-3 py-1.5 text-sm rounded-lg border border-slate-300 text-slate-600 hover:bg-slate-50">🖨 PDF</button>
+                            <button @click="pledger.open=false" class="text-slate-400">✕</button>
+                        </div>
+                    </div>
+                    <div v-if="pledger.loading" class="text-slate-400 text-sm py-8 text-center">Loading…</div>
+                    <div v-else-if="pledger.data">
+                        <div class="mb-4 rounded-lg bg-slate-50 border border-slate-200 px-4 py-3">
+                            <div class="font-medium text-slate-800">{{ pledger.data.party.name }}</div>
+                            <div class="text-xs text-slate-500">
+                                <span v-if="pledger.data.party.gst">GSTIN {{ pledger.data.party.gst }}</span>
+                                <span v-if="pledger.data.party.pan"> · PAN {{ pledger.data.party.pan }}</span>
+                                <span v-if="pledger.data.party.phone"> · {{ pledger.data.party.phone }}</span>
+                            </div>
+                        </div>
+                        <div class="table-scroll">
+                            <table class="w-full text-sm">
+                                <thead><tr class="text-left text-slate-400 border-b border-slate-100">
+                                    <th class="py-2 px-3">Date</th><th class="py-2 px-3">Type</th><th class="py-2 px-3">Project</th><th class="py-2 px-3">Reference</th>
+                                    <th class="py-2 px-3 text-right">Income</th><th class="py-2 px-3 text-right">Expense</th>
+                                </tr></thead>
+                                <tbody>
+                                    <tr v-for="(t,i) in pledger.data.transactions" :key="i" class="border-b border-slate-50">
+                                        <td class="py-2 px-3 text-slate-600 whitespace-nowrap">{{ (t.txn_date||'').slice(0,10) }}</td>
+                                        <td class="py-2 px-3"><span class="px-2 py-0.5 rounded-full text-xs" :class="t.txn_type==='income'?'bg-emerald-50 text-emerald-700':'bg-rose-50 text-rose-700'">{{ t.txn_type }}</span></td>
+                                        <td class="py-2 px-3 text-slate-600">{{ t.project_name || '—' }}</td>
+                                        <td class="py-2 px-3 text-slate-600">{{ t.reference || '—' }}</td>
+                                        <td class="py-2 px-3 text-right text-emerald-700 whitespace-nowrap">{{ +t.income_amount ? money(t.income_amount) : '—' }}</td>
+                                        <td class="py-2 px-3 text-right text-rose-600 whitespace-nowrap">{{ +t.expense_amount ? money(t.expense_amount) : '—' }}</td>
+                                    </tr>
+                                    <tr v-if="!pledger.data.transactions.length"><td colspan="6" class="py-6 text-center text-slate-400">No income or expenses for this {{ pledger.label.toLowerCase() }} yet.</td></tr>
+                                </tbody>
+                                <tfoot>
+                                    <tr class="border-t-2 border-slate-200 font-semibold text-slate-700">
+                                        <td class="py-2 px-3" colspan="4">Totals</td>
+                                        <td class="py-2 px-3 text-right text-emerald-700">{{ money(pledger.data.income_total) }}</td>
+                                        <td class="py-2 px-3 text-right text-rose-600">{{ money(pledger.data.expense_total) }}</td>
+                                    </tr>
+                                    <tr><td colspan="6" class="py-1 px-3 text-right text-xs" :class="pledger.data.net >= 0 ? 'text-emerald-700' : 'text-rose-600'">Net (income − expense): {{ money(pledger.data.net) }}</td></tr>
+                                </tfoot>
+                            </table>
+                        </div>
+                    </div>
+                    <div class="flex justify-end mt-4"><button @click="pledger.open=false" class="px-4 py-2 text-sm rounded-lg border border-slate-300 text-slate-600">Close</button></div>
                 </div>
             </div>
         </div>`,
