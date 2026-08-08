@@ -148,6 +148,18 @@ return function (Router $router, array $auth, array $write): void {
         $r->get('/salary-slips/{id}', 'SalarySlipController@show', $auth);
         $r->delete('/salary-slips/{id}', 'SalarySlipController@destroy', $write);
 
+        // ---- Staff logins (office / field) --------------------------------
+        $r->get('/staff/{id}/login', 'StaffLoginController@show', array_merge($auth, [OrgAdminOnly::class]));
+        $r->post('/staff/{id}/login', 'StaffLoginController@save', array_merge($write, [OrgAdminOnly::class]));
+        $r->delete('/staff/{id}/login', 'StaffLoginController@revoke', array_merge($write, [OrgAdminOnly::class]));
+
+        // ---- Field staff daily work + admin review ------------------------
+        $r->get('/field/context', 'FieldController@context', $auth);
+        $r->get('/field/logs', 'FieldController@myLogs', $auth);
+        $r->post('/field/logs', 'FieldController@store', $write);
+        $r->get('/field/review', 'FieldController@review', array_merge($auth, [OrgAdminOnly::class]));
+        $r->post('/field/logs/{id}/review', 'FieldController@setReview', array_merge($write, [OrgAdminOnly::class]));
+
         // ---- Institution settings -----------------------------------------
         $r->get('/organisation', 'OrganisationController@show', $auth);
         $r->get('/organisation/logo', 'OrganisationController@logo', $auth);

@@ -456,8 +456,14 @@ try {
 
     // ---- Staff master (workforce directory) -------------------------------
     $db->insert('staff_members', ['tenant_id' => DEMO_ORG, 'staff_code' => 'STF-001', 'name' => 'Ramesh Kumar', 'phone' => '+91 90000 11111', 'email' => 'ramesh@skyline.test', 'staff_type' => 'office', 'address' => 'Kochi', 'pan' => 'ABCPR1234K', 'status' => 'active']);
-    $db->insert('staff_members', ['tenant_id' => DEMO_ORG, 'staff_code' => 'STF-002', 'name' => 'Anil Mason', 'phone' => '+91 90000 22222', 'staff_type' => 'skilled', 'address' => 'Ernakulam', 'status' => 'active']);
+    $staff2 = $db->insert('staff_members', ['tenant_id' => DEMO_ORG, 'staff_code' => 'STF-002', 'name' => 'Anil Mason', 'phone' => '+91 90000 22222', 'staff_type' => 'skilled', 'address' => 'Ernakulam', 'status' => 'active']);
     $staff1 = $db->insert('staff_members', ['tenant_id' => DEMO_ORG, 'staff_code' => 'STF-003', 'name' => 'Helper Team', 'staff_type' => 'unskilled', 'status' => 'active']);
+
+    // A field-staff login for Anil Mason, assigned to the demo project.
+    $fieldUser = $db->insert('users', ['organisation_id' => DEMO_ORG, 'name' => 'Anil Mason', 'email' => 'field@skyline.test', 'password_hash' => hash_pw(PASSWORD), 'role' => 'field_staff', 'status' => 'active']);
+    $db->execute('UPDATE staff_members SET user_id = ?, login_role = ? WHERE id = ?', [$fieldUser, 'field', $staff2]);
+    $db->insert('staff_projects', ['tenant_id' => DEMO_ORG, 'staff_member_id' => $staff2, 'project_id' => $projectId]);
+    $db->insert('field_daily_logs', ['tenant_id' => DEMO_ORG, 'staff_member_id' => $staff2, 'project_id' => $projectId, 'task_name' => 'Ground floor slab shuttering', 'skilled_count' => 4, 'unskilled_count' => 8, 'log_date' => '2026-06-02', 'notes' => 'Need extra unskilled for the pour', 'review_status' => 'pending']);
 
     // ---- Bank account master ----------------------------------------------
     $bankMain = $db->insert('bank_accounts', ['tenant_id' => DEMO_ORG, 'account_label' => 'Main Current A/c', 'bank_name' => 'State Bank', 'account_number' => '00112233445', 'ifsc' => 'SBIN0001234', 'branch_name' => 'Marine Drive', 'opening_balance' => 250000, 'opening_balance_date' => '2026-01-01', 'is_active' => 1]);

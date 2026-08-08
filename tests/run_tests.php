@@ -405,6 +405,34 @@ check('validator: string max sizes by length, not numeric value', function () {
     $arr = \Core\Validator::make(['x' => ['a']], ['x' => 'string']);
     return !$arr->passes();
 });
+check('staff logins + field work: create login, assign projects, log, admin review', function () use ($db, $projectId) {
+    $ls = new \App\Services\StaffLoginService();
+    $fs = new \App\Services\FieldService();
+    // Give a fresh staff member a field login assigned to the demo project.
+    $sid = (int)$db->fetchColumn("SELECT id FROM staff_members WHERE tenant_id=? AND staff_code='STF-001'", [DEMO]);
+    $res = $ls->save(DEMO, $sid, ['email' => 'ramesh.login@skyline.test', 'password' => 'Password123!', 'login_role' => 'field', 'project_ids' => [$projectId]]);
+    if (!$res['has_login'] || $res['login_role'] !== 'field') return false;
+    if (!in_array($projectId, array_map('intval', $res['project_ids']), true)) return false;
+    // The created user has role field_staff.
+    $uid = (int)$db->fetchColumn("SELECT user_id FROM staff_members WHERE id=?", [$sid]);
+    if ((string)$db->fetchColumn('SELECT role FROM users WHERE id=?', [$uid]) !== 'field_staff') return false;
+    // The field staff sees only their assigned projects + can log against them.
+    $ctx = $fs->context(DEMO, $uid);
+    if (count($ctx['projects']) !== 1) return false;
+    $log = $fs->createLog(DEMO, $uid, ['project_id' => $projectId, 'task_name' => 'Column casting', 'skilled_count' => 3, 'unskilled_count' => 5, 'log_date' => '2026-06-05']);
+    if ($log['review_status'] !== 'pending' || (int)$log['skilled_count'] !== 3) return false;
+    // Logging against an unassigned project is blocked.
+    $other = (int)$db->fetchColumn('SELECT id FROM projects WHERE tenant_id=? AND id<>? LIMIT 1', [DEMO, $projectId]);
+    if ($other) { try { $fs->createLog(DEMO, $uid, ['project_id' => $other, 'task_name' => 'x']); return false; } catch (ServiceException $e) {} }
+    // Admin review moves it to approved.
+    $reviewed = $fs->review(DEMO, (int)$log['id'], null, 'approved', 'ok');
+    if ($reviewed['review_status'] !== 'approved') return false;
+    if (!count($fs->myLogs(DEMO, $uid))) return false;
+    // Revoking the login unlinks the user + clears assignments.
+    $ls->revoke(DEMO, $sid);
+    if ($db->fetchColumn("SELECT user_id FROM staff_members WHERE id=?", [$sid]) !== null) return false;
+    return (int)$db->fetchColumn('SELECT COUNT(*) FROM staff_projects WHERE staff_member_id=?', [$sid]) === 0;
+});
 check('party ledger: client income+project expense, supplier/subcontractor expense', function () use ($db) {
     $svc = new \App\Services\PartyLedgerService();
     $clientId = (int)$db->fetchColumn('SELECT id FROM clients WHERE tenant_id=? LIMIT 1', [DEMO]);
