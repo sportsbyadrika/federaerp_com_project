@@ -6,7 +6,7 @@
  */
 (function () {
     'use strict';
-    const { createApp, reactive, ref, computed, onMounted } = Vue;
+    const { createApp, reactive, ref, computed, onMounted, watch } = Vue;
     const store = window.store;
     const CSApp = window.CSApp;
 
@@ -408,7 +408,12 @@
                     { label: 'Dashboard', href: '#/' },
                     { label: 'Organisations', href: '#/organisations' },
                 ];
-                return [
+                // Field staff get a restricted, task-focused menu.
+                if (role.value === 'field_staff') return [
+                    { label: 'My Field Work', href: '#/field' },
+                ];
+                // Office staff: operational access without admin-only tools.
+                if (role.value === 'office_staff') return [
                     { label: 'Dashboard', href: '#/' },
                     { label: 'Projects', href: '#/projects' },
                     { label: 'Staff', href: '#/staff' },
@@ -416,9 +421,26 @@
                     { label: 'Income', href: '#/income' },
                     { label: 'Documents', href: '#/documents' },
                     { label: 'Reports', href: '#/reports' },
+                ];
+                // Org Admin / staff.
+                return [
+                    { label: 'Dashboard', href: '#/' },
+                    { label: 'Projects', href: '#/projects' },
+                    { label: 'Staff', href: '#/staff' },
+                    { label: 'Field Reports', href: '#/field-reports' },
+                    { label: 'Expenditure', href: '#/expenditure' },
+                    { label: 'Income', href: '#/income' },
+                    { label: 'Documents', href: '#/documents' },
+                    { label: 'Reports', href: '#/reports' },
                     { label: 'Setup', href: '#/setup' },
                 ];
             });
+            // Field staff shouldn't land on the org dashboard.
+            watch(() => [store.route, store.user && store.user.role], () => {
+                if (store.user && store.user.role === 'field_staff' && (store.route === '/' || store.route === '')) {
+                    CSApp.navigate('/field');
+                }
+            }, { immediate: true });
 
             async function logout() {
                 try { await api.post('/api/auth/logout', {}); } catch (e) {}
