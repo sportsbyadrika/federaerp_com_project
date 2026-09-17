@@ -39,6 +39,8 @@
                 mode: 'fund_transfer', bank_account_id: null, reference: '', income_date: new Date().toISOString().slice(0, 10), notes: '',
             });
             const needsBank = computed(() => ['fund_transfer', 'cheque', 'dd'].includes(form.mode));
+            // Entry pages never offer completed projects.
+            const activeProjects = computed(() => projects.value.filter(p => p.status !== 'completed'));
             const gstAmount = computed(() => Math.round((+form.amount || 0) * (+form.gst_percent || 0) / 100 * 100) / 100);
             const round2 = (n) => Math.round((+n || 0) * 100) / 100;
             // Two-way base <-> total, linked by the GST %.
@@ -190,7 +192,7 @@
                 }
             });
             return {
-                rows, total, gstTotal, baseTotal, loading, saving, projects, clients, banks, needsBank, filterProjectId, fmt, nf, MODES, modeLabel,
+                rows, total, gstTotal, baseTotal, loading, saving, projects, activeProjects, clients, banks, needsBank, filterProjectId, fmt, nf, MODES, modeLabel,
                 showModal, editingId, form, gstAmount, sym, recalcFromBase, recalcFromTotal, load,
                 openAdd, openEdit, save, remove, onProjectChange,
                 showReceiptAsk, receiptRow, askReceipt, printReceipt,
@@ -209,7 +211,7 @@
                     <span class="text-xs text-slate-400">Project</span>
                     <select v-model="filterProjectId" @change="load" class="rounded-lg border border-slate-300 px-2 py-1 text-sm">
                         <option value="">All projects</option>
-                        <option v-for="p in projects" :key="p.id" :value="p.id">{{ p.name }}</option>
+                        <option v-for="p in activeProjects" :key="p.id" :value="p.id">{{ p.name }}</option>
                     </select>
                 </div>
                 <div class="text-sm text-slate-500 text-right">
@@ -265,7 +267,7 @@
                             <label class="block text-xs text-slate-500 mb-1">Project</label>
                             <select v-model="form.project_id" @change="onProjectChange" class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm">
                                 <option :value="null">— select —</option>
-                                <option v-for="p in projects" :key="p.id" :value="p.id">{{ p.name }}</option>
+                                <option v-for="p in activeProjects" :key="p.id" :value="p.id">{{ p.name }}</option>
                             </select>
                         </div>
                         <div>

@@ -52,6 +52,8 @@
             function recalcFromTotal() { form.amount = round2((+form.total || 0) / (1 + (+form.gst_percent || 0) / 100)); }
 
             const partyOptions = computed(() => form.party_type === 'supplier' ? suppliers.value : (form.party_type === 'subcontractor' ? subcontractors.value : (form.party_type === 'staff' ? staff.value : [])));
+            // Entry pages never offer completed projects.
+            const activeProjects = computed(() => projects.value.filter(p => p.status !== 'completed'));
 
             async function loadLists() {
                 try { projects.value = (await api.get('/api/projects')).data; } catch (e) { projects.value = []; }
@@ -160,7 +162,7 @@
             });
             return {
                 rows, total, gstTotal, baseTotal, loading, saving, filterScope, filterProjectId, projects, types, tasks, banks, needsBank, fmt, nf, sym, MODES, modeLabel,
-                showModal, editingId, form, partyOptions, gstAmount, recalcFromBase, recalcFromTotal, load, openAdd, openEdit, save, remove,
+                showModal, editingId, form, partyOptions, activeProjects, gstAmount, recalcFromBase, recalcFromTotal, load, openAdd, openEdit, save, remove,
                 onScopeChange, onProjectChange, onPartyTypeChange,
                 pledger, partyLinkable, openPartyLedger,
             };
@@ -185,7 +187,7 @@
                         <span class="text-xs text-slate-400">Project</span>
                         <select v-model="filterProjectId" @change="load" class="rounded-lg border border-slate-300 px-2 py-1 text-sm">
                             <option value="">All projects</option>
-                            <option v-for="p in projects" :key="p.id" :value="p.id">{{ p.name }}</option>
+                            <option v-for="p in activeProjects" :key="p.id" :value="p.id">{{ p.name }}</option>
                         </select>
                     </div>
                 </div>
@@ -253,7 +255,7 @@
                             <label class="block text-xs text-slate-500 mb-1">Project</label>
                             <select v-model="form.project_id" @change="onProjectChange" class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm">
                                 <option :value="null">— select —</option>
-                                <option v-for="p in projects" :key="p.id" :value="p.id">{{ p.name }}</option>
+                                <option v-for="p in activeProjects" :key="p.id" :value="p.id">{{ p.name }}</option>
                             </select>
                         </div>
                         <div>
