@@ -80,9 +80,12 @@
                 if (!el.value || map) return;
                 const c = coords();
                 map = L.map(el.value).setView(c || DEFAULT_CENTER, c ? 15 : 4);
-                L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-                    maxZoom: 19,
-                    attribution: '&copy; OpenStreetMap contributors',
+                // CARTO basemap (free, key-less, embed-friendly) — OSM's own tile
+                // servers block app/embedded use under their tile usage policy.
+                L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', {
+                    maxZoom: 20,
+                    subdomains: 'abcd',
+                    attribution: '&copy; OpenStreetMap contributors &copy; CARTO',
                 }).addTo(map);
                 if (c) setMarker(c);
                 if (props.editable) {

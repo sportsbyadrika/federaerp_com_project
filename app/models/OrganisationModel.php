@@ -12,6 +12,7 @@ final class OrganisationModel extends BaseModel
     protected bool $softDelete = true;
     protected array $fillable = [
         'id', 'name', 'legal_name', 'gst_number', 'pan', 'letterhead_address', 'logo_path',
+        'signature_path', 'seal_path',
         'email', 'phone', 'address', 'city', 'country', 'currency', 'currency_symbol',
         'is_platform', 'status',
     ];

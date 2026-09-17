@@ -49,4 +49,24 @@ final class OrganisationController extends Controller
             Response::stream($f['abs_path'], $f['mime'], $f['download_name'], true);
         });
     }
+
+    /** POST /api/organisation/image/{kind} — logo|signature|seal upload (Org Admin). */
+    public function uploadImage(Request $request): void
+    {
+        if (empty($_FILES['file'])) {
+            $this->fail('no_file', 'An image file is required', 422);
+            return;
+        }
+        $kind = (string)$request->param('kind');
+        $this->guard(fn() => Response::success($this->service->saveImage((int)$request->tenantId(), $kind, $_FILES['file'])));
+    }
+
+    /** GET /api/organisation/image/{kind} — stream signature/seal/logo (authenticated). */
+    public function image(Request $request): void
+    {
+        $this->guard(function () use ($request) {
+            $f = $this->service->imageForStream((int)$request->tenantId(), (string)$request->param('kind'));
+            Response::stream($f['abs_path'], $f['mime'], $f['download_name'], true);
+        });
+    }
 }
