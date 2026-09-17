@@ -15,6 +15,7 @@
             const clients = ref([]);
             const clientFilter = ref('');
             const search = ref('');
+            const showCompleted = ref(false);
 
             const fmt = (n) => CSApp.money(n);
 
@@ -37,10 +38,13 @@
             }
             async function loadClients() { try { clients.value = (await api.get('/api/clients')).data; } catch (e) { clients.value = []; } }
 
-            // Client dropdown + free-text project search (default: all).
+            // Client dropdown + free-text project search. Completed projects are
+            // hidden by default; the toggle flips to showing ONLY completed.
             const projects = computed(() => {
                 const q = search.value.trim().toLowerCase();
                 return allProjects.value.filter(p => {
+                    const isCompleted = p.status === 'completed';
+                    if (showCompleted.value !== isCompleted) return false;
                     if (clientFilter.value && String(p.client_id) !== String(clientFilter.value)) return false;
                     if (q && !((p.name || '').toLowerCase().includes(q) || (p.code || '').toLowerCase().includes(q))) return false;
                     return true;
@@ -58,7 +62,7 @@
 
             const hasAny = computed(() => allProjects.value.length > 0);
             onMounted(async () => { await loadClients(); await load(); });
-            return { projects, totals, loading, clients, clientFilter, search, hasAny, fmt, mapModal, hasLoc, openMap };
+            return { projects, totals, loading, clients, clientFilter, search, showCompleted, hasAny, fmt, mapModal, hasLoc, openMap };
         },
         template: `
         <div>
@@ -85,6 +89,7 @@
                     </select>
                 </div>
                 <input v-model="search" placeholder="Search project name or code…" class="rounded-lg border border-slate-300 px-3 py-1.5 text-sm w-64">
+                <label class="flex items-center gap-2 text-sm text-slate-600"><input type="checkbox" v-model="showCompleted" class="accent-brand"> Show Completed projects</label>
                 <span class="text-xs text-slate-400">{{ projects.length }} project(s)</span>
             </div>
 
