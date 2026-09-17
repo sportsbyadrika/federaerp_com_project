@@ -21,6 +21,13 @@ final class OrganisationService extends BaseService
         'address', 'city', 'country', 'letterhead_address',
     ];
 
+    /** Image kind => the organisations column that stores its path. */
+    private const IMAGE_COLUMNS = [
+        'logo'      => 'logo_path',
+        'signature' => 'signature_path',
+        'seal'      => 'seal_path',
+    ];
+
     public function __construct()
     {
         $this->orgs = new OrganisationModel();
@@ -35,6 +42,8 @@ final class OrganisationService extends BaseService
         }
         unset($org['is_platform']);
         $org['has_logo'] = !empty($org['logo_path']);
+        $org['has_signature'] = !empty($org['signature_path']);
+        $org['has_seal'] = !empty($org['seal_path']);
         return $org;
     }
 
@@ -52,35 +61,54 @@ final class OrganisationService extends BaseService
         return $this->get($tenantId);
     }
 
-    /** Store a logo image; replaces any previous logo. */
-    public function saveLogo(int $tenantId, array $file): array
+    /** Store an institution image (logo | signature | seal); replaces the old one. */
+    public function saveImage(int $tenantId, string $kind, array $file): array
     {
-        // Restrict to images.
+        $column = self::IMAGE_COLUMNS[$kind] ?? null;
+        if ($column === null) {
+            throw ServiceException::notFound('Unknown image kind');
+        }
         $ext = strtolower(pathinfo((string)($file['name'] ?? ''), PATHINFO_EXTENSION));
         if (!in_array($ext, ['png', 'jpg', 'jpeg', 'webp', 'gif'], true)) {
-            throw ServiceException::unprocessable('Logo must be a PNG, JPG, WEBP or GIF image.');
+            throw ServiceException::unprocessable('Image must be a PNG, JPG, WEBP or GIF.');
         }
         $stored = $this->storage->storeUpload($file, $tenantId);
 
         $org = $this->orgs->findById($tenantId);
-        $old = $org['logo_path'] ?? null;
+        $old = $org[$column] ?? null;
 
-        $this->orgs->update($tenantId, null, ['logo_path' => $stored['path']]);
+        $this->orgs->update($tenantId, null, [$column => $stored['path']]);
         if ($old) {
             $this->storage->delete($old);
         }
         return $this->get($tenantId);
     }
 
-    /** Resolve the logo for streaming (absolute path + mime). */
+    /** Resolve an institution image for streaming (absolute path + mime). */
+    public function imageForStream(int $tenantId, string $kind): array
+    {
+        $column = self::IMAGE_COLUMNS[$kind] ?? null;
+        if ($column === null) {
+            throw ServiceException::notFound('Unknown image kind');
+        }
+        $org = $this->orgs->findById($tenantId);
+        if ($org === null || empty($org[$column])) {
+            throw ServiceException::notFound(ucfirst($kind) . ' not set');
+        }
+        $abs = $this->storage->absolutePath($org[$column]);
+        $mime = (new \finfo(FILEINFO_MIME_TYPE))->file($abs) ?: 'image/png';
+        return ['abs_path' => $abs, 'mime' => $mime, 'download_name' => $kind . '.' . pathinfo($abs, PATHINFO_EXTENSION)];
+    }
+
+    /** Back-compat wrappers for the existing logo routes. */
+    public function saveLogo(int $tenantId, array $file): array
+    {
+        return $this->saveImage($tenantId, 'logo', $file);
+    }
+
     public function logoForStream(int $tenantId): array
     {
-        $org = $this->orgs->findById($tenantId);
-        if ($org === null || empty($org['logo_path'])) {
-            throw ServiceException::notFound('No logo set');
-        }
-        $abs = $this->storage->absolutePath($org['logo_path']);
-        $mime = (new \finfo(FILEINFO_MIME_TYPE))->file($abs) ?: 'image/png';
-        return ['abs_path' => $abs, 'mime' => $mime, 'download_name' => 'logo.' . pathinfo($abs, PATHINFO_EXTENSION)];
+        return $this->imageForStream($tenantId, 'logo');
     }
 }
+

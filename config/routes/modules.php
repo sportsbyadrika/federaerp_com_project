@@ -165,6 +165,8 @@ return function (Router $router, array $auth, array $write): void {
         $r->get('/organisation/logo', 'OrganisationController@logo', $auth);
         $r->put('/organisation', 'OrganisationController@update', array_merge($write, [OrgAdminOnly::class]));
         $r->post('/organisation/logo', 'OrganisationController@uploadLogo', array_merge($write, [OrgAdminOnly::class]));
+        $r->get('/organisation/image/{kind}', 'OrganisationController@image', $auth);
+        $r->post('/organisation/image/{kind}', 'OrganisationController@uploadImage', array_merge($write, [OrgAdminOnly::class]));
 
         // ---- Currencies + settings ----------------------------------------
         $r->get('/settings', 'CurrencyController@settings', $auth);

@@ -433,6 +433,15 @@ check('staff logins + field work: create login, assign projects, log, admin revi
     if ($db->fetchColumn("SELECT user_id FROM staff_members WHERE id=?", [$sid]) !== null) return false;
     return (int)$db->fetchColumn('SELECT COUNT(*) FROM staff_projects WHERE staff_member_id=?', [$sid]) === 0;
 });
+check('institution images: has_* flags exposed; unknown/unset kind guarded', function () {
+    $svc = new \App\Services\OrganisationService();
+    $org = $svc->get(DEMO);
+    if (!array_key_exists('has_logo', $org) || !array_key_exists('has_signature', $org) || !array_key_exists('has_seal', $org)) return false;
+    // Unknown image kind is rejected.
+    try { $svc->imageForStream(DEMO, 'bogus'); return false; } catch (ServiceException $e) { if ($e->code() !== 'not_found') return false; }
+    // A kind with no stored image is not_found.
+    try { $svc->imageForStream(DEMO, 'signature'); return false; } catch (ServiceException $e) { return $e->code() === 'not_found'; }
+});
 check('party ledger: client income+project expense, supplier/subcontractor expense', function () use ($db) {
     $svc = new \App\Services\PartyLedgerService();
     $clientId = (int)$db->fetchColumn('SELECT id FROM clients WHERE tenant_id=? LIMIT 1', [DEMO]);
